@@ -1,8 +1,9 @@
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import {
-  LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend,
+  LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ReferenceLine,
   ResponsiveContainer, AreaChart, Area
 } from "recharts";
+import { runHRAnalysis } from "./src/analysis/heartRate/index.js";
 import {
   AlertTriangle, CheckCircle, Clock, Heart, Activity, Brain, Mic,
   User, Bell, Battery, Wifi, Stethoscope, Home, TrendingUp
@@ -175,6 +176,24 @@ function DoctorDashboard({ selected, setSelected }) {
   const [tab, setTab] = useState("overview");
   const c = riskColors[selected.riskLevel];
 
+  const hrData = useMemo(() => runHRAnalysis(selected, 7), [selected.id]);
+  const todayHR = hrData.analysisResults[hrData.analysisResults.length - 1];
+  const hrTrendData = hrData.analysisResults.map((r) => ({
+    day: `D${r.dayPostOp + 1}`,
+    avgHR: r.contextAverages.rest ?? r.summary.avg,
+  }));
+
+  const fmtAlertTime = (ts) => {
+    const d = new Date(ts);
+    const now = new Date();
+    const hhmm = `${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`;
+    if (d.toDateString() === now.toDateString()) return hhmm;
+    if (new Date(now - 86400000).toDateString() === d.toDateString()) return `Yest. ${hhmm}`;
+    return d.toLocaleDateString();
+  };
+
+  const hrAlerts = hrData.alerts.filter((a) => a.severity >= 3).slice(0, 6);
+
   return (
     <div className="flex h-full">
       {/* ── Sidebar ── */}
@@ -274,7 +293,7 @@ function DoctorDashboard({ selected, setSelected }) {
           {[
             { key: "overview", label: "Overview" },
             { key: "trends",   label: "Trends" },
-            { key: "alerts",   label: `Alerts${selected.alerts.length > 0 ? ` (${selected.alerts.length})` : ""}` },
+            { key: "alerts",   label: `Alerts${(selected.alerts.length + hrAlerts.length) > 0 ? ` (${selected.alerts.length + hrAlerts.length})` : ""}` },
             { key: "ailog",    label: "AI Conversation" },
           ].map(({ key, label }) => (
             <button
@@ -306,6 +325,44 @@ function DoctorDashboard({ selected, setSelected }) {
                   <MetricCard icon={TrendingUp} label="Fine Motor"       value={selected.metrics.fineMotor}    unit="/100" color="bg-teal-500"   sub="Touch interaction" />
                 </div>
               </div>
+
+              {/* HR live analysis card */}
+              {todayHR && (
+                <div className="bg-white rounded-xl border border-gray-100 shadow-sm p-5">
+                  <div className="flex items-center justify-between mb-3">
+                    <p className="text-sm font-semibold text-gray-700">Heart Rate — Live Sensor Analysis</p>
+                    <span className={`text-xs font-bold px-2 py-0.5 rounded-full ${
+                      todayHR.clean ? "bg-green-100 text-green-700" : "bg-red-100 text-red-700"
+                    }`}>
+                      {todayHR.clean ? "Normal" : todayHR.findings.map((f) => f.replace(/_/g, " ")).join(", ")}
+                    </span>
+                  </div>
+                  <div className="grid grid-cols-4 gap-3">
+                    <div className="text-center p-3 bg-pink-50 rounded-lg">
+                      <p className="text-2xl font-bold text-gray-800">{todayHR.contextAverages.rest ?? todayHR.summary.avg}</p>
+                      <p className="text-xs text-gray-400 mt-0.5">Avg Resting (bpm)</p>
+                    </div>
+                    <div className="text-center p-3 bg-gray-50 rounded-lg">
+                      <p className="text-2xl font-bold text-gray-800">{todayHR.summary.min}–{todayHR.summary.max}</p>
+                      <p className="text-xs text-gray-400 mt-0.5">Range (bpm)</p>
+                    </div>
+                    <div className="text-center p-3 bg-blue-50 rounded-lg">
+                      <p className="text-2xl font-bold text-gray-800">{todayHR.hrv}</p>
+                      <p className="text-xs text-gray-400 mt-0.5">HRV RMSSD (bpm)</p>
+                    </div>
+                    <div className="text-center p-3 bg-yellow-50 rounded-lg">
+                      <p className={`text-2xl font-bold ${
+                        Math.abs(todayHR.baselineDeviationPct ?? 0) >= 20 ? "text-red-600" : "text-gray-800"
+                      }`}>
+                        {todayHR.baselineDeviationPct !== null
+                          ? `${todayHR.baselineDeviationPct > 0 ? "+" : ""}${todayHR.baselineDeviationPct}%`
+                          : "—"}
+                      </p>
+                      <p className="text-xs text-gray-400 mt-0.5">vs Baseline</p>
+                    </div>
+                  </div>
+                </div>
+              )}
 
               {/* Risk trend chart */}
               <div className="bg-white rounded-xl border border-gray-100 shadow-sm p-5">
@@ -406,6 +463,23 @@ function DoctorDashboard({ selected, setSelected }) {
                 </ResponsiveContainer>
               </div>
 
+              <div className="bg-white rounded-xl border border-gray-100 shadow-sm p-5">
+                <p className="text-sm font-semibold text-gray-700 mb-1">Heart Rate — 7-Day Recovery Trend</p>
+                <p className="text-xs text-gray-400 mb-4">
+                  Daily average resting HR (bpm) · Dashed red line = tachycardia threshold (100 bpm)
+                </p>
+                <ResponsiveContainer width="100%" height={200}>
+                  <LineChart data={hrTrendData}>
+                    <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
+                    <XAxis dataKey="day" tick={{ fontSize: 11 }} />
+                    <YAxis domain={[40, 140]} tick={{ fontSize: 11 }} unit=" bpm" width={55} />
+                    <Tooltip formatter={(v) => [`${v} bpm`, "Avg Resting HR"]} />
+                    <ReferenceLine y={100} stroke="#ef4444" strokeDasharray="4 4" label={{ value: "Tachycardia", position: "insideTopRight", fontSize: 10, fill: "#ef4444" }} />
+                    <Line type="monotone" dataKey="avgHR" stroke="#ec4899" strokeWidth={2.5} dot={{ r: 4 }} name="Avg Resting HR" />
+                  </LineChart>
+                </ResponsiveContainer>
+              </div>
+
               <div className="bg-blue-50 rounded-xl border border-blue-100 p-4">
                 <p className="text-sm font-semibold text-blue-800 mb-1">How the Risk Score is Computed</p>
                 <p className="text-xs text-blue-700 leading-relaxed">
@@ -423,39 +497,79 @@ function DoctorDashboard({ selected, setSelected }) {
           {/* ── ALERTS ── */}
           {tab === "alerts" && (
             <div className="space-y-3">
-              {selected.alerts.length === 0 ? (
+              {selected.alerts.length === 0 && hrAlerts.length === 0 ? (
                 <div className="text-center py-16">
                   <CheckCircle size={44} className="mx-auto mb-3 text-green-400" />
                   <p className="text-sm font-semibold text-green-600">No alerts — patient recovering within normal range</p>
                 </div>
               ) : (
-                selected.alerts.map((a, i) => (
-                  <div
-                    key={i}
-                    className={`bg-white rounded-xl border p-4 flex items-start gap-3
-                      ${a.sev === "HIGH" ? "border-red-200" : a.sev === "MED" ? "border-yellow-200" : "border-gray-200"}`}
-                  >
-                    <div className={`p-2 rounded-lg shrink-0
-                      ${a.sev === "HIGH" ? "bg-red-100" : a.sev === "MED" ? "bg-yellow-100" : "bg-blue-50"}`}
-                    >
-                      {a.sev === "INFO"
-                        ? <CheckCircle size={16} className="text-blue-400" />
-                        : <AlertTriangle size={16} className={a.sev === "HIGH" ? "text-red-500" : "text-yellow-500"} />}
-                    </div>
-                    <div className="flex-1">
-                      <p className="text-sm font-medium text-gray-800">{a.msg}</p>
-                      <p className="text-xs text-gray-400 mt-0.5">{a.time}</p>
-                    </div>
-                    <span className={`text-xs font-bold px-2 py-0.5 rounded shrink-0
-                      ${a.sev === "HIGH" ? "bg-red-100 text-red-700" :
-                        a.sev === "MED"  ? "bg-yellow-100 text-yellow-700" :
-                        a.sev === "LOW"  ? "bg-gray-100 text-gray-600" :
-                        "bg-blue-50 text-blue-600"}`}
-                    >
-                      {a.sev}
-                    </span>
-                  </div>
-                ))
+                <>
+                  {/* Static clinical alerts */}
+                  {selected.alerts.length > 0 && (
+                    <>
+                      <p className="text-xs font-semibold text-gray-400 uppercase tracking-wider">Clinical Alerts</p>
+                      {selected.alerts.map((a, i) => (
+                        <div
+                          key={i}
+                          className={`bg-white rounded-xl border p-4 flex items-start gap-3
+                            ${a.sev === "HIGH" ? "border-red-200" : a.sev === "MED" ? "border-yellow-200" : "border-gray-200"}`}
+                        >
+                          <div className={`p-2 rounded-lg shrink-0
+                            ${a.sev === "HIGH" ? "bg-red-100" : a.sev === "MED" ? "bg-yellow-100" : "bg-blue-50"}`}
+                          >
+                            {a.sev === "INFO"
+                              ? <CheckCircle size={16} className="text-blue-400" />
+                              : <AlertTriangle size={16} className={a.sev === "HIGH" ? "text-red-500" : "text-yellow-500"} />}
+                          </div>
+                          <div className="flex-1">
+                            <p className="text-sm font-medium text-gray-800">{a.msg}</p>
+                            <p className="text-xs text-gray-400 mt-0.5">{a.time}</p>
+                          </div>
+                          <span className={`text-xs font-bold px-2 py-0.5 rounded shrink-0
+                            ${a.sev === "HIGH" ? "bg-red-100 text-red-700" :
+                              a.sev === "MED"  ? "bg-yellow-100 text-yellow-700" :
+                              a.sev === "LOW"  ? "bg-gray-100 text-gray-600" :
+                              "bg-blue-50 text-blue-600"}`}
+                          >
+                            {a.sev}
+                          </span>
+                        </div>
+                      ))}
+                    </>
+                  )}
+
+                  {/* Heart rate alerts from analysis module */}
+                  {hrAlerts.length > 0 && (
+                    <>
+                      <p className="text-xs font-semibold text-gray-400 uppercase tracking-wider pt-2">
+                        Heart Rate Alerts ({hrAlerts.length})
+                      </p>
+                      {hrAlerts.map((a, i) => (
+                        <div
+                          key={`hr-${i}`}
+                          className={`bg-white rounded-xl border p-4 flex items-start gap-3
+                            ${a.severity >= 4 ? "border-red-200" : "border-yellow-200"}`}
+                        >
+                          <div className={`p-2 rounded-lg shrink-0 ${a.severity >= 4 ? "bg-red-100" : "bg-yellow-100"}`}>
+                            <Heart size={16} className={a.severity >= 4 ? "text-red-500" : "text-yellow-500"} />
+                          </div>
+                          <div className="flex-1 min-w-0">
+                            <p className="text-sm font-medium text-gray-800">{a.title}</p>
+                            <p className="text-xs text-gray-500 mt-0.5 leading-relaxed">{a.description}</p>
+                            <p className="text-xs text-gray-400 mt-1">
+                              {fmtAlertTime(a.timestamp)} · Day {a.dayPostOp + 1} post-op
+                            </p>
+                          </div>
+                          <span className={`text-xs font-bold px-2 py-0.5 rounded shrink-0
+                            ${a.severity >= 4 ? "bg-red-100 text-red-700" : "bg-yellow-100 text-yellow-700"}`}
+                          >
+                            {a.severity >= 4 ? "HIGH" : "MED"}
+                          </span>
+                        </div>
+                      ))}
+                    </>
+                  )}
+                </>
               )}
             </div>
           )}
