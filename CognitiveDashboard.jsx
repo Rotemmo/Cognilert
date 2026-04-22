@@ -10,6 +10,7 @@ import {
 
 // ─────────────────────────────────────────────
 // SYNTHESIZED PATIENT DATA
+// Risk score: 1 = good condition, 5 = immediate critical
 // ─────────────────────────────────────────────
 const PATIENTS = [
   {
@@ -18,17 +19,17 @@ const PATIENTS = [
     age: 72,
     surgery: "Hip Replacement",
     dayPost: 5,
-    riskScore: 87,
+    riskScore: 5,
     riskLevel: "HIGH",
     alert: true,
     alertMessage: "Speech incoherence detected — possible early delirium",
     metrics: { hrv: 18, jerk: 78, reactionTime: 520, speechScore: 31, fineMotor: 38 },
     trend: [
-      { day: "D1", hrv: 35, jerk: 42, speech: 72, risk: 30 },
-      { day: "D2", hrv: 30, jerk: 50, speech: 65, risk: 42 },
-      { day: "D3", hrv: 26, jerk: 58, speech: 58, risk: 55 },
-      { day: "D4", hrv: 22, jerk: 68, speech: 44, risk: 70 },
-      { day: "D5", hrv: 18, jerk: 78, speech: 31, risk: 87 },
+      { day: "D1", hrv: 35, jerk: 42, speech: 72, risk: 2 },
+      { day: "D2", hrv: 30, jerk: 50, speech: 65, risk: 3 },
+      { day: "D3", hrv: 26, jerk: 58, speech: 58, risk: 3 },
+      { day: "D4", hrv: 22, jerk: 68, speech: 44, risk: 4 },
+      { day: "D5", hrv: 18, jerk: 78, speech: 31, risk: 5 },
     ],
     aiLog: [
       { role: "AI",      text: "Good morning Ruth! How are you feeling today?" },
@@ -50,20 +51,20 @@ const PATIENTS = [
     age: 68,
     surgery: "Cardiac Bypass (CABG)",
     dayPost: 8,
-    riskScore: 54,
+    riskScore: 3,
     riskLevel: "MODERATE",
     alert: false,
     alertMessage: null,
     metrics: { hrv: 28, jerk: 52, reactionTime: 380, speechScore: 65, fineMotor: 61 },
     trend: [
-      { day: "D1", hrv: 22, jerk: 68, speech: 52, risk: 72 },
-      { day: "D2", hrv: 24, jerk: 64, speech: 57, risk: 68 },
-      { day: "D3", hrv: 25, jerk: 60, speech: 60, risk: 62 },
-      { day: "D4", hrv: 26, jerk: 57, speech: 63, risk: 58 },
-      { day: "D5", hrv: 27, jerk: 55, speech: 63, risk: 56 },
-      { day: "D6", hrv: 27, jerk: 54, speech: 64, risk: 55 },
-      { day: "D7", hrv: 28, jerk: 53, speech: 64, risk: 54 },
-      { day: "D8", hrv: 28, jerk: 52, speech: 65, risk: 54 },
+      { day: "D1", hrv: 22, jerk: 68, speech: 52, risk: 4 },
+      { day: "D2", hrv: 24, jerk: 64, speech: 57, risk: 4 },
+      { day: "D3", hrv: 25, jerk: 60, speech: 60, risk: 4 },
+      { day: "D4", hrv: 26, jerk: 57, speech: 63, risk: 3 },
+      { day: "D5", hrv: 27, jerk: 55, speech: 63, risk: 3 },
+      { day: "D6", hrv: 27, jerk: 54, speech: 64, risk: 3 },
+      { day: "D7", hrv: 28, jerk: 53, speech: 64, risk: 3 },
+      { day: "D8", hrv: 28, jerk: 52, speech: 65, risk: 3 },
     ],
     aiLog: [
       { role: "AI",      text: "Good morning David! Ready for our daily check-in?" },
@@ -82,19 +83,19 @@ const PATIENTS = [
     age: 75,
     surgery: "Abdominal (Colectomy)",
     dayPost: 12,
-    riskScore: 22,
+    riskScore: 1,
     riskLevel: "LOW",
     alert: false,
     alertMessage: null,
     metrics: { hrv: 44, jerk: 28, reactionTime: 290, speechScore: 88, fineMotor: 82 },
     trend: [
-      { day: "D1",  hrv: 28, jerk: 62, speech: 58, risk: 68 },
-      { day: "D3",  hrv: 32, jerk: 55, speech: 65, risk: 58 },
-      { day: "D5",  hrv: 36, jerk: 48, speech: 72, risk: 45 },
-      { day: "D7",  hrv: 39, jerk: 39, speech: 78, risk: 35 },
-      { day: "D9",  hrv: 42, jerk: 33, speech: 84, risk: 27 },
-      { day: "D11", hrv: 43, jerk: 30, speech: 86, risk: 24 },
-      { day: "D12", hrv: 44, jerk: 28, speech: 88, risk: 22 },
+      { day: "D1",  hrv: 28, jerk: 62, speech: 58, risk: 4 },
+      { day: "D3",  hrv: 32, jerk: 55, speech: 65, risk: 3 },
+      { day: "D5",  hrv: 36, jerk: 48, speech: 72, risk: 3 },
+      { day: "D7",  hrv: 39, jerk: 39, speech: 78, risk: 2 },
+      { day: "D9",  hrv: 42, jerk: 33, speech: 84, risk: 2 },
+      { day: "D11", hrv: 43, jerk: 30, speech: 86, risk: 2 },
+      { day: "D12", hrv: 44, jerk: 28, speech: 88, risk: 1 },
     ],
     aiLog: [
       { role: "AI",      text: "Good morning Sara! How are you doing today?" },
@@ -111,15 +112,15 @@ const PATIENTS = [
     age: 70,
     surgery: "Knee Replacement",
     dayPost: 3,
-    riskScore: 41,
+    riskScore: 2,
     riskLevel: "MODERATE",
     alert: false,
     alertMessage: null,
     metrics: { hrv: 31, jerk: 55, reactionTime: 340, speechScore: 74, fineMotor: 68 },
     trend: [
-      { day: "D1", hrv: 30, jerk: 58, speech: 70, risk: 45 },
-      { day: "D2", hrv: 31, jerk: 56, speech: 72, risk: 43 },
-      { day: "D3", hrv: 31, jerk: 55, speech: 74, risk: 41 },
+      { day: "D1", hrv: 30, jerk: 58, speech: 70, risk: 3 },
+      { day: "D2", hrv: 31, jerk: 56, speech: 72, risk: 3 },
+      { day: "D3", hrv: 31, jerk: 55, speech: 74, risk: 2 },
     ],
     aiLog: [
       { role: "AI",      text: "Good morning Moshe! Day 3 after your knee surgery. How are you?" },
@@ -143,7 +144,8 @@ const riskColors = {
   LOW:      { badge: "bg-green-500",  text: "text-green-700",  bg: "bg-green-50",  border: "border-green-200" },
 };
 
-const scoreColor = (s) => s >= 70 ? "text-red-600" : s >= 40 ? "text-yellow-600" : "text-green-600";
+// s >= 4 → red, s >= 2 → yellow, s === 1 → green
+const scoreColor = (s) => s >= 4 ? "text-red-600" : s >= 2 ? "text-yellow-600" : "text-green-600";
 
 // ─────────────────────────────────────────────
 // METRIC CARD
@@ -261,7 +263,7 @@ function DoctorDashboard({ selected, setSelected }) {
               <p className="text-xs text-gray-400">Cognitive Risk Score</p>
               <p className={`text-4xl font-black leading-none ${scoreColor(selected.riskScore)}`}>
                 {selected.riskScore}
-                <span className="text-sm text-gray-400 font-normal">/100</span>
+                <span className="text-sm text-gray-400 font-normal">/5</span>
               </p>
             </div>
           </div>
@@ -309,7 +311,7 @@ function DoctorDashboard({ selected, setSelected }) {
               <div className="bg-white rounded-xl border border-gray-100 shadow-sm p-5">
                 <p className="text-sm font-semibold text-gray-700 mb-1">Cognitive Risk Score — Recovery Trend</p>
                 <p className="text-xs text-gray-400 mb-4">
-                  Composite score (0 = fully recovered, 100 = critical). Alert threshold at 60.
+                  Composite score (1 = good condition, 5 = critical). Alert threshold at 3.
                 </p>
                 <ResponsiveContainer width="100%" height={180}>
                   <AreaChart data={selected.trend}>
@@ -321,7 +323,7 @@ function DoctorDashboard({ selected, setSelected }) {
                     </defs>
                     <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
                     <XAxis dataKey="day" tick={{ fontSize: 11 }} />
-                    <YAxis domain={[0, 100]} tick={{ fontSize: 11 }} />
+                    <YAxis domain={[1, 5]} ticks={[1, 2, 3, 4, 5]} tick={{ fontSize: 11 }} />
                     <Tooltip />
                     <Area type="monotone" dataKey="risk" stroke="#ef4444" fill="url(#rg)" strokeWidth={2.5} name="Risk Score" />
                   </AreaChart>
@@ -329,9 +331,9 @@ function DoctorDashboard({ selected, setSelected }) {
                 <div className="flex items-center gap-4 mt-2">
                   <div className="flex items-center gap-1.5">
                     <div className="w-4 h-0.5 bg-red-400" />
-                    <span className="text-xs text-gray-400">Risk Score (0–100)</span>
+                    <span className="text-xs text-gray-400">Risk Score (1–5)</span>
                   </div>
-                  <span className="text-xs text-gray-400">⚠️ Alert threshold: 60</span>
+                  <span className="text-xs text-gray-400">⚠️ Alert threshold: 3</span>
                 </div>
               </div>
 
@@ -388,17 +390,18 @@ function DoctorDashboard({ selected, setSelected }) {
               <div className="bg-white rounded-xl border border-gray-100 shadow-sm p-5">
                 <p className="text-sm font-semibold text-gray-700 mb-1">Speech Coherence vs. Risk Score</p>
                 <p className="text-xs text-gray-400 mb-4">
-                  AI-analyzed speech (higher = better) overlaid with the composite cognitive risk score
+                  AI-analyzed speech coherence (0–100, left axis) overlaid with composite cognitive risk score (1–5, right axis)
                 </p>
                 <ResponsiveContainer width="100%" height={220}>
                   <LineChart data={selected.trend}>
                     <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
                     <XAxis dataKey="day" tick={{ fontSize: 11 }} />
-                    <YAxis domain={[0, 100]} tick={{ fontSize: 11 }} />
+                    <YAxis yAxisId="speech" domain={[0, 100]} tick={{ fontSize: 11 }} />
+                    <YAxis yAxisId="risk" orientation="right" domain={[1, 5]} ticks={[1, 2, 3, 4, 5]} tick={{ fontSize: 11 }} />
                     <Tooltip />
                     <Legend />
-                    <Line type="monotone" dataKey="speech" stroke="#3b82f6" strokeWidth={2.5} dot={{ r: 4 }} name="Speech Coherence" />
-                    <Line type="monotone" dataKey="risk"   stroke="#ef4444" strokeWidth={2.5} strokeDasharray="5 5" dot={{ r: 4 }} name="Risk Score" />
+                    <Line yAxisId="speech" type="monotone" dataKey="speech" stroke="#3b82f6" strokeWidth={2.5} dot={{ r: 4 }} name="Speech Coherence (0–100)" />
+                    <Line yAxisId="risk"   type="monotone" dataKey="risk"   stroke="#ef4444" strokeWidth={2.5} strokeDasharray="5 5" dot={{ r: 4 }} name="Risk Score (1–5)" />
                   </LineChart>
                 </ResponsiveContainer>
               </div>
@@ -406,11 +409,12 @@ function DoctorDashboard({ selected, setSelected }) {
               <div className="bg-blue-50 rounded-xl border border-blue-100 p-4">
                 <p className="text-sm font-semibold text-blue-800 mb-1">How the Risk Score is Computed</p>
                 <p className="text-xs text-blue-700 leading-relaxed">
-                  The composite Cognitive Risk Score is produced by a personalized ML model trained on the patient's
+                  The composite Cognitive Risk Score (1–5) is produced by a personalized ML model trained on the patient's
                   own pre-discharge baseline. It fuses four signal layers: <b>HRV</b> (physiological stress),
                   <b> Jerk</b> (motor control quality via IMU), <b>Speech Coherence</b> (AI acoustic analysis), and
-                  <b> Fine Motor</b> (touch interaction latency). A score above 60 triggers an alert to the care team.
-                  This approach achieves passive, zero-effort monitoring with no wearable beyond a standard wristband.
+                  <b> Fine Motor</b> (touch interaction latency). 1 = good condition, 5 = immediate critical — a score
+                  above 3 triggers an alert to the care team. This approach achieves passive, zero-effort monitoring
+                  with no wearable beyond a standard wristband.
                 </p>
               </div>
             </div>
@@ -536,8 +540,8 @@ function PatientApp({ patient }) {
   };
 
   const scoreCol =
-    patient.riskScore <= 30 ? "text-green-300"
-    : patient.riskScore <= 60 ? "text-yellow-300"
+    patient.riskScore <= 1 ? "text-green-300"
+    : patient.riskScore <= 3 ? "text-yellow-300"
     : "text-red-300";
 
   return (
@@ -611,7 +615,7 @@ function PatientApp({ patient }) {
                 </defs>
                 <Area type="monotone" dataKey="risk" stroke="#3b82f6" fill="url(#pg)" strokeWidth={2} />
                 <XAxis dataKey="day" tick={{ fontSize: 8 }} />
-                <YAxis domain={[0, 100]} hide />
+                <YAxis domain={[1, 5]} hide />
                 <Tooltip contentStyle={{ fontSize: "10px" }} />
               </AreaChart>
             </ResponsiveContainer>
