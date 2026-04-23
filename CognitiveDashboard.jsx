@@ -7,6 +7,17 @@ import { runHRAnalysis } from "./src/analysis/heartRate/index.js";
 import { VoiceCheckIn } from "./src/components/VoiceCheckIn";
 import { analyzeVoiceMetrics } from "./src/analysis/voice/riskAnalyzer.js";
 import {
+  saveVoiceAnalysis,
+  loadVoiceAnalyses,
+  getAllPatientsWithData,
+  downloadDataExport,
+  exportPatientDataAsCSV,
+  getStorageStats,
+  getRiskDistribution,
+  formatTimestampForDisplay,
+  parseTimestamp
+} from "./data/voiceStorage.js";
+import {
   AlertTriangle, CheckCircle, Clock, Heart, Activity, Brain, Mic,
   User, Bell, Battery, Wifi, Stethoscope, Home, TrendingUp
 } from "lucide-react";
@@ -201,6 +212,484 @@ function MetricCard({ icon: Icon, label, value, unit, color, sub }) {
 }
 
 // ─────────────────────────────────────────────
+// PATIENT DATA TAB
+// ─────────────────────────────────────────────
+function PatientDataTab({ patient }) {
+  const [view, setView] = useState("list"); // list | detail | stats
+  const [selectedAnalysis, setSelectedAnalysis] = useState(null);
+  const [searchTerm, setSearchTerm] = useState("");
+  const [dateFilter, setDateFilter] = useState("all");
+  const [riskFilter, setRiskFilter] = useState("all");
+
+  // Load patient data
+  const voiceAnalyses = loadVoiceAnalyses(patient.id);
+  const allPatients = getAllPatientsWithData();
+  const stats = getStorageStats();
+  const riskDist = getRiskDistribution();
+
+  // Filter patients for list view
+  const filteredPatients = allPatients.filter(p => {
+    const matchesSearch = p.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+                         p.patientId.toString().includes(searchTerm);
+    const matchesRisk = riskFilter === "all" || p.latestVoiceAnalysis?.riskLabel === riskFilter;
+    
+    if (!matchesSearch || !matchesRisk) return false;
+    
+    // Date filter
+    if (dateFilter === "today") {
+      const today = new Date().toDateString();
+      return new Date(p.latestVoiceAnalysis?.savedAt || p.createdAt).toDateString() === today;
+    } else if (dateFilter === "week") {
+      const weekAgo = new Date();
+      weekAgo.setDate(weekAgo.getDate() - 7);
+      return new Date(p.latestVoiceAnalysis?.savedAt || p.createdAt) >= weekAgo;
+    }
+    return true;
+  });
+
+  const handleExportAll = () => {
+    downloadDataExport();
+  };
+
+  const handleExportPatient = (patientId) => {
+    exportPatientDataAsCSV(patientId);
+  };
+
+  return (
+    <div className="space-y-6">
+      {/* Header */}
+      <div className="bg-white rounded-xl border border-gray-100 shadow-sm p-6">
+        <div className="flex items-center justify-between mb-4">
+          <div>
+            <h2 className="text-xl font-bold text-gray-800">Patient Data Management</h2>
+            <p className="text-sm text-gray-400">Repository-based storage in /data/ folder</p>
+          </div>
+          <div className="flex items-center gap-3">
+            <button
+              onClick={handleExportAll}
+              className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition-colors flex items-center gap-2"
+            >
+              📥 Export All Data
+            </button>
+            <button
+              onClick={() => handleExportPatient(patient.id)}
+              className="bg-green-600 text-white px-4 py-2 rounded-lg hover:bg-green-700 transition-colors flex items-center gap-2"
+            >
+              ✅ Export {patient.name}'s Data
+            </button>
+          </div>
+        </div>
+
+        {/* Stats */}
+        <div className="grid grid-cols-4 gap-4">
+          <div className="bg-blue-50 rounded-lg p-4">
+            <p className="text-xs text-blue-600 font-semibold">Total Patients</p>
+            <p className="text-2xl font-bold text-blue-800">{stats?.totalPatients || 0}</p>
+          </div>
+          <div className="bg-purple-50 rounded-lg p-4">
+            <p className="text-xs text-purple-600 font-semibold">Total Analyses</p>
+            <p className="text-2xl font-bold text-purple-800">{stats?.totalAnalyses || 0}</p>
+          </div>
+          <div className="bg-green-50 rounded-lg p-4">
+            <p className="text-xs text-green-600 font-semibold">Storage Size</p>
+            <p className="text-2xl font-bold text-green-800">{stats?.storageSizeKB || 0} KB</p>
+          </div>
+          <div className="bg-gray-50 rounded-lg p-4">
+            <p className="text-xs text-gray-600 font-semibold">Risk Distribution</p>
+            <div className="text-sm mt-1 space-y-1">
+              <p className="text-red-600">HIGH: {riskDist?.HIGH || 0}</p>
+              <p className="text-yellow-600">MODERATE: {riskDist?.MODERATE || 0}</p>
+              <p className="text-green-600">LOW: {riskDist?.LOW || 0}</p>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* Controls */}
+      <div className="bg-white rounded-xl border border-gray-100 shadow-sm p-4">
+        <div className="flex flex-wrap gap-4">
+          <div className="flex gap-2">
+            <button
+              onClick={() => setView("list")}
+              className={`px-4 py-2 rounded-lg font-semibold ${
+                view === "list" ? "bg-blue-600 text-white" : "bg-gray-100 text-gray-700 hover:bg-gray-200"
+              }`}
+            >
+              📋 Patient List
+            </button>
+            <button
+              onClick={() => setView("detail")}
+              className={`px-4 py-2 rounded-lg font-semibold ${
+                view === "detail" ? "bg-blue-600 text-white" : "bg-gray-100 text-gray-700 hover:bg-gray-200"
+              }`}
+            >
+              📊 {patient.name}'s History
+            </button>
+            <button
+              onClick={() => setView("stats")}
+              className={`px-4 py-2 rounded-lg font-semibold ${
+                view === "stats" ? "bg-blue-600 text-white" : "bg-gray-100 text-gray-700 hover:bg-gray-200"
+              }`}
+            >
+              📈 Analytics
+            </button>
+          </div>
+          
+          {view === "list" && (
+            <>
+              <div className="flex-1 max-w-md">
+                <input
+                  type="text"
+                  placeholder="Search patients..."
+                  value={searchTerm}
+                  onChange={(e) => setSearchTerm(e.target.value)}
+                  className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-300"
+                />
+              </div>
+              <select
+                value={dateFilter}
+                onChange={(e) => setDateFilter(e.target.value)}
+                className="px-3 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-300"
+              >
+                <option value="all">All Dates</option>
+                <option value="today">Today</option>
+                <option value="week">Last 7 Days</option>
+              </select>
+              <select
+                value={riskFilter}
+                onChange={(e) => setRiskFilter(e.target.value)}
+                className="px-3 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-300"
+              >
+                <option value="all">All Risk Levels</option>
+                <option value="HIGH">HIGH</option>
+                <option value="MODERATE">MODERATE</option>
+                <option value="LOW">LOW</option>
+              </select>
+            </>
+          )}
+        </div>
+      </div>
+
+      {/* Content */}
+      {view === "list" && (
+        <PatientListView 
+          patients={filteredPatients} 
+          onExport={handleExportPatient}
+          selectedPatientId={patient.id}
+        />
+      )}
+
+      {view === "detail" && (
+        <PatientDetailView 
+          patient={patient} 
+          analyses={voiceAnalyses}
+          selectedAnalysis={selectedAnalysis}
+          onSelectAnalysis={setSelectedAnalysis}
+        />
+      )}
+
+      {view === "stats" && (
+        <AnalyticsView patients={allPatients} />
+      )}
+    </div>
+  );
+}
+
+// Patient List View Component
+function PatientListView({ patients, onExport, selectedPatientId }) {
+  if (patients.length === 0) {
+    return (
+      <div className="bg-white rounded-xl border border-gray-100 shadow-sm p-8 text-center">
+        <p className="text-gray-400">No patients found with stored data</p>
+      </div>
+    );
+  }
+
+  return (
+    <div className="bg-white rounded-xl border border-gray-100 shadow-sm overflow-hidden">
+      <div className="overflow-x-auto">
+        <table className="w-full">
+          <thead className="bg-gray-50 border-b border-gray-200">
+            <tr>
+              <th className="text-left px-4 py-3 text-xs font-semibold text-gray-600 uppercase tracking-wider">Patient</th>
+              <th className="text-left px-4 py-3 text-xs font-semibold text-gray-600 uppercase tracking-wider">ID</th>
+              <th className="text-left px-4 py-3 text-xs font-semibold text-gray-600 uppercase tracking-wider">Latest Analysis</th>
+              <th className="text-left px-4 py-3 text-xs font-semibold text-gray-600 uppercase tracking-wider">Risk Score</th>
+              <th className="text-left px-4 py-3 text-xs font-semibold text-gray-600 uppercase tracking-wider">Findings</th>
+              <th className="text-left px-4 py-3 text-xs font-semibold text-gray-600 uppercase tracking-wider">Actions</th>
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-gray-200">
+            {patients.map((p) => {
+              const latest = p.latestVoiceAnalysis;
+              const c = latest?.riskLabel === "HIGH" ? "bg-red-100 text-red-700" : 
+                         latest?.riskLabel === "MODERATE" ? "bg-yellow-100 text-yellow-700" : 
+                         "bg-green-100 text-green-700";
+              
+              return (
+                <tr key={p.patientId} className="hover:bg-gray-50">
+                  <td className="px-4 py-4">
+                    <div className="flex items-center gap-3">
+                      <div className="w-8 h-8 bg-gray-100 rounded-full flex items-center justify-center">
+                        <span className="text-sm font-semibold text-gray-600">{p.name.charAt(0)}</span>
+                      </div>
+                      <div>
+                        <p className="font-semibold text-gray-800">{p.name}</p>
+                        <p className="text-xs text-gray-400">{p.patientInfo?.surgery || 'Unknown surgery'}</p>
+                      </div>
+                    </div>
+                  </td>
+                  <td className="px-4 py-4 text-sm text-gray-600">{p.patientId}</td>
+                  <td className="px-4 py-4 text-sm text-gray-600">
+                    {latest ? formatTimestampForDisplay(parseTimestamp(latest.filename)) : 'No data'}
+                  </td>
+                  <td className="px-4 py-4">
+                    {latest ? (
+                      <span className={`px-2 py-1 rounded-full text-xs font-bold ${c}`}>
+                        {latest.riskScore} ({latest.riskLabel})
+                      </span>
+                    ) : (
+                      <span className="text-gray-400">No data</span>
+                    )}
+                  </td>
+                  <td className="px-4 py-4 text-sm text-gray-600">
+                    {latest ? `${latest.findingCount} findings` : 'No data'}
+                  </td>
+                  <td className="px-4 py-4">
+                    <div className="flex gap-2">
+                      <button
+                        onClick={() => onExport(p.patientId)}
+                        className="bg-green-600 text-white px-3 py-1 rounded-lg text-xs hover:bg-green-700 transition-colors"
+                      >
+                        📊 Export
+                      </button>
+                      {p.patientId === selectedPatientId && (
+                        <span className="bg-blue-100 text-blue-700 px-2 py-1 rounded-lg text-xs font-semibold">
+                          Viewing
+                        </span>
+                      )}
+                    </div>
+                  </td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+}
+
+// Patient Detail View Component
+function PatientDetailView({ patient, analyses, selectedAnalysis, onSelectAnalysis }) {
+  if (analyses.length === 0) {
+    return (
+      <div className="bg-white rounded-xl border border-gray-100 shadow-sm p-8 text-center">
+        <p className="text-gray-400">No voice analyses found for {patient.name}</p>
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-6">
+      {/* Analysis List */}
+      <div className="bg-white rounded-xl border border-gray-100 shadow-sm p-6">
+        <h3 className="text-lg font-semibold text-gray-800 mb-4">Voice Analysis History</h3>
+        <div className="space-y-3">
+          {analyses.map((analysis, index) => {
+            const isSelected = selectedAnalysis === analysis;
+            const c = analysis.riskLabel === "HIGH" ? "border-red-200 bg-red-50" : 
+                       analysis.riskLabel === "MODERATE" ? "border-yellow-200 bg-yellow-50" : 
+                       "border-green-200 bg-green-50";
+            
+            return (
+              <button
+                key={index}
+                onClick={() => onSelectAnalysis(isSelected ? null : analysis)}
+                className={`w-full text-left p-4 rounded-lg border transition-all ${
+                  isSelected ? `${c} ring-2 ring-blue-300` : "border-gray-200 hover:bg-gray-50"
+                }`}
+              >
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-4">
+                    <span className={`px-2 py-1 rounded-full text-xs font-bold ${
+                      analysis.riskLabel === "HIGH" ? "bg-red-100 text-red-700" :
+                      analysis.riskLabel === "MODERATE" ? "bg-yellow-100 text-yellow-700" :
+                      "bg-green-100 text-green-700"
+                    }`}>
+                      {analysis.riskScore} ({analysis.riskLabel})
+                    </span>
+                    <div>
+                      <p className="font-semibold text-gray-800">
+                        {formatTimestampForDisplay(parseTimestamp(analysis.filename))}
+                      </p>
+                      <p className="text-sm text-gray-600">{analysis.findingCount} findings</p>
+                    </div>
+                  </div>
+                  <div className="text-right">
+                    <p className="text-sm text-gray-600">Avg Speech: {analysis.metrics?.avgSpeechRate || 0} WPM</p>
+                    <p className="text-sm text-gray-600">Duration: {analysis.metrics?.totalDuration || 0}s</p>
+                  </div>
+                </div>
+              </button>
+            );
+          })}
+        </div>
+      </div>
+
+      {/* Selected Analysis Details */}
+      {selectedAnalysis && (
+        <div className="bg-white rounded-xl border border-gray-100 shadow-sm p-6">
+          <div className="flex items-center justify-between mb-4">
+            <h3 className="text-lg font-semibold text-gray-800">Analysis Details</h3>
+            <span className={`px-3 py-1 rounded-full text-sm font-bold ${
+              selectedAnalysis.riskLabel === "HIGH" ? "bg-red-100 text-red-700" :
+              selectedAnalysis.riskLabel === "MODERATE" ? "bg-yellow-100 text-yellow-700" :
+              "bg-green-100 text-green-700"
+            }`}>
+              Risk Score: {selectedAnalysis.riskScore} ({selectedAnalysis.riskLabel})
+            </span>
+          </div>
+
+          <div className="grid grid-cols-2 gap-6">
+            <div>
+              <h4 className="font-semibold text-gray-800 mb-3">Key Metrics</h4>
+              <div className="space-y-2">
+                <div className="flex justify-between text-sm">
+                  <span className="text-gray-600">Average Speech Rate:</span>
+                  <span className="font-semibold">{selectedAnalysis.metrics?.avgSpeechRate || 0} WPM</span>
+                </div>
+                <div className="flex justify-between text-sm">
+                  <span className="text-gray-600">Total Duration:</span>
+                  <span className="font-semibold">{selectedAnalysis.metrics?.totalDuration || 0}s</span>
+                </div>
+                <div className="flex justify-between text-sm">
+                  <span className="text-gray-600">Total Pauses:</span>
+                  <span className="font-semibold">{selectedAnalysis.metrics?.totalPauses || 0}</span>
+                </div>
+                <div className="flex justify-between text-sm">
+                  <span className="text-gray-600">Average Energy:</span>
+                  <span className="font-semibold">{selectedAnalysis.metrics?.avgEnergy || 0} dB</span>
+                </div>
+                <div className="flex justify-between text-sm">
+                  <span className="text-gray-600">Response Count:</span>
+                  <span className="font-semibold">{selectedAnalysis.metrics?.responseCount || 0}</span>
+                </div>
+              </div>
+            </div>
+
+            <div>
+              <h4 className="font-semibold text-gray-800 mb-3">Findings</h4>
+              {selectedAnalysis.findings.length > 0 ? (
+                <div className="space-y-2">
+                  {selectedAnalysis.findings.map((finding, index) => (
+                    <div key={index} className="bg-gray-50 rounded-lg p-3">
+                      <p className="text-sm font-semibold text-gray-800">{finding.description}</p>
+                      <p className="text-xs text-gray-600 mt-1">
+                        Question {finding.questionNumber}: {finding.type} (severity: {finding.severity})
+                      </p>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <p className="text-gray-600">No specific findings detected</p>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// Analytics View Component
+function AnalyticsView({ patients }) {
+  const riskDist = getRiskDistribution();
+  const stats = getStorageStats();
+
+  // Calculate trends
+  const riskTrend = patients.map(p => ({
+    date: p.latestVoiceAnalysis?.savedAt ? new Date(p.latestVoiceAnalysis.savedAt).toLocaleDateString() : 'Unknown',
+    high: p.latestVoiceAnalysis?.riskLabel === 'HIGH' ? 1 : 0,
+    moderate: p.latestVoiceAnalysis?.riskLabel === 'MODERATE' ? 1 : 0,
+    low: p.latestVoiceAnalysis?.riskLabel === 'LOW' ? 1 : 0
+  }));
+
+  return (
+    <div className="space-y-6">
+      {/* Risk Distribution Chart */}
+      <div className="bg-white rounded-xl border border-gray-100 shadow-sm p-6">
+        <h3 className="text-lg font-semibold text-gray-800 mb-4">Risk Distribution</h3>
+        <div className="grid grid-cols-3 gap-4">
+          <div className="text-center p-4 bg-red-50 rounded-lg">
+            <div className="text-3xl font-bold text-red-600">{riskDist.HIGH}</div>
+            <div className="text-sm text-red-700 font-semibold">HIGH RISK</div>
+          </div>
+          <div className="text-center p-4 bg-yellow-50 rounded-lg">
+            <div className="text-3xl font-bold text-yellow-600">{riskDist.MODERATE}</div>
+            <div className="text-sm text-yellow-700 font-semibold">MODERATE RISK</div>
+          </div>
+          <div className="text-center p-4 bg-green-50 rounded-lg">
+            <div className="text-3xl font-bold text-green-600">{riskDist.LOW}</div>
+            <div className="text-sm text-green-700 font-semibold">LOW RISK</div>
+          </div>
+        </div>
+      </div>
+
+      {/* Storage Statistics */}
+      <div className="bg-white rounded-xl border border-gray-100 shadow-sm p-6">
+        <h3 className="text-lg font-semibold text-gray-800 mb-4">Storage Statistics</h3>
+        <div className="grid grid-cols-4 gap-4">
+          <div className="bg-blue-50 rounded-lg p-4">
+            <p className="text-xs text-blue-600 font-semibold">Total Patients</p>
+            <p className="text-2xl font-bold text-blue-800">{stats?.totalPatients || 0}</p>
+          </div>
+          <div className="bg-purple-50 rounded-lg p-4">
+            <p className="text-xs text-purple-600 font-semibold">Voice Analyses</p>
+            <p className="text-2xl font-bold text-purple-800">{stats?.voiceAnalyses || 0}</p>
+          </div>
+          <div className="bg-green-50 rounded-lg p-4">
+            <p className="text-xs text-green-600 font-semibold">Storage Size</p>
+            <p className="text-2xl font-bold text-green-800">{stats?.storageSizeKB || 0} KB</p>
+          </div>
+          <div className="bg-gray-50 rounded-lg p-4">
+            <p className="text-xs text-gray-600 font-semibold">Data Files</p>
+            <p className="text-2xl font-bold text-gray-800">{stats?.patients?.length || 0}</p>
+          </div>
+        </div>
+      </div>
+
+      {/* Patient List for Reference */}
+      <div className="bg-white rounded-xl border border-gray-100 shadow-sm p-6">
+        <h3 className="text-lg font-semibold text-gray-800 mb-4">All Patients with Data</h3>
+        <div className="grid grid-cols-2 gap-4">
+          {patients.map((p) => (
+            <div key={p.patientId} className="flex items-center justify-between p-3 border border-gray-200 rounded-lg">
+              <div>
+                <p className="font-semibold text-gray-800">{p.name}</p>
+                <p className="text-sm text-gray-600">ID: {p.patientId}</p>
+              </div>
+              <div className="text-right">
+                <p className={`px-2 py-1 rounded-full text-xs font-bold ${
+                  p.latestVoiceAnalysis?.riskLabel === "HIGH" ? "bg-red-100 text-red-700" :
+                  p.latestVoiceAnalysis?.riskLabel === "MODERATE" ? "bg-yellow-100 text-yellow-700" :
+                  "bg-green-100 text-green-700"
+                }`}>
+                  {p.latestVoiceAnalysis?.riskScore || 'No data'} ({p.latestVoiceAnalysis?.riskLabel || 'No data'})
+                </p>
+                <p className="text-xs text-gray-500 mt-1">
+                  {p.voiceAnalysisCount} analyses
+                </p>
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ─────────────────────────────────────────────
 // DOCTOR DASHBOARD
 // ─────────────────────────────────────────────
 function DoctorDashboard({ selected, setSelected }) {
@@ -322,10 +811,11 @@ function DoctorDashboard({ selected, setSelected }) {
         {/* Tabs */}
         <div className="bg-white border-b border-gray-200 px-6 shrink-0">
           {[
-            { key: "overview", label: "Overview" },
-            { key: "trends",   label: "Trends" },
-            { key: "alerts",   label: `Alerts${(selected.alerts.length + hrAlerts.length) > 0 ? ` (${selected.alerts.length + hrAlerts.length})` : ""}` },
-            { key: "ailog",    label: "AI Conversation" },
+          { key: "overview", label: "Overview" },
+          { key: "trends",   label: "Trends" },
+          { key: "alerts",   label: `Alerts${(selected.alerts.length + hrAlerts.length) > 0 ? ` (${selected.alerts.length + hrAlerts.length})` : ""}` },
+          { key: "ailog",    label: "AI Conversation" },
+          { key: "patientData", label: "Patient Data" },
           ].map(({ key, label }) => (
             <button
               key={key}
@@ -658,6 +1148,11 @@ function DoctorDashboard({ selected, setSelected }) {
             </div>
           )}
 
+          {/* ── PATIENT DATA ── */}
+          {tab === "patientData" && (
+            <PatientDataTab patient={selected} />
+          )}
+
 
 
         </div>
@@ -687,7 +1182,7 @@ function PatientApp({ patient }) {
         patient.risks = {};
       }
       
-      // Store voice analysis data separately
+      // Store voice analysis data separately (in memory)
       patient.risks.voice = {
         riskScore: voiceAnalysis.riskScore,
         riskLabel: voiceAnalysis.riskLabel,
@@ -697,7 +1192,16 @@ function PatientApp({ patient }) {
         timestamp: voiceAnalysis.timestamp
       };
       
-      console.log("Voice analysis stored:", patient.risks.voice);
+      // ✅ Store to localStorage/persistent storage
+      const savedAnalysis = saveVoiceAnalysis(patient.id, voiceAnalysis, {
+        name: patient.name,
+        age: patient.age,
+        surgery: patient.surgery,
+        dayPost: patient.dayPost
+      });
+      
+      console.log("Voice analysis stored in memory:", patient.risks.voice);
+      console.log("Voice analysis saved to storage:", savedAnalysis);
     }
     
     // Store AI conversation log
