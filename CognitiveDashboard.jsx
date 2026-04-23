@@ -1,4 +1,4 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import {
   LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ReferenceLine,
   ResponsiveContainer, AreaChart, Area
@@ -1167,6 +1167,12 @@ function DoctorDashboard({ selected, setSelected }) {
 function PatientApp({ patient }) {
   const [screen, setScreen] = useState("home"); // home | checking-in | results
   const [checkInResults, setCheckInResults] = useState(null);
+  const [now, setNow] = useState(new Date());
+  useEffect(() => {
+    const t = setInterval(() => setNow(new Date()), 1000);
+    return () => clearInterval(t);
+  }, []);
+  const clockStr = now.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
 
   const handleCheckInComplete = (result) => {
     console.log("Check-in completed:", result);
@@ -1236,7 +1242,7 @@ function PatientApp({ patient }) {
       <div key={patient.id} className="w-96 bg-white rounded-3xl shadow-2xl border border-gray-300 overflow-hidden flex flex-col">
         {/* Status bar */}
         <div className="bg-gray-900 px-5 pt-3 pb-2 flex justify-between items-center shrink-0">
-          <span className="text-white text-xs font-medium">9:41 AM</span>
+          <span className="text-white text-xs font-medium">{clockStr}</span>
           <div className="flex items-center gap-2">
             <Wifi size={11} className="text-white" />
             <Battery size={11} className="text-white" />
