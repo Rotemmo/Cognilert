@@ -4,6 +4,8 @@ import {
   ResponsiveContainer, AreaChart, Area
 } from "recharts";
 import { runHRAnalysis } from "./src/analysis/heartRate/index.js";
+import { VoiceCheckIn } from "./src/components/VoiceCheckIn";
+import { analyzeVoiceMetrics } from "./src/analysis/voice/riskAnalyzer.js";
 import {
   AlertTriangle, CheckCircle, Clock, Heart, Activity, Brain, Mic,
   User, Bell, Battery, Wifi, Stethoscope, Home, TrendingUp
@@ -24,6 +26,14 @@ const PATIENTS = [
     riskLevel: "HIGH",
     alert: true,
     alertMessage: "Speech incoherence detected — possible early delirium",
+    
+    // Segregated risk signals (for multi-feature aggregation later)
+    risks: {
+      voice: null,           // Will be populated by analyzeVoiceMetrics
+      heartRate: null,       // Will be populated by HR analyzer
+      // Other features (motion, fine motor, etc.) go here
+    },
+    
     metrics: { hrv: 18, jerk: 78, reactionTime: 520, speechScore: 31, fineMotor: 38 },
     trend: [
       { day: "D1", hrv: 35, jerk: 42, speech: 72, risk: 2 },
@@ -56,6 +66,13 @@ const PATIENTS = [
     riskLevel: "MODERATE",
     alert: false,
     alertMessage: null,
+    
+    // Segregated risk signals
+    risks: {
+      voice: null,
+      heartRate: null,
+    },
+    
     metrics: { hrv: 28, jerk: 52, reactionTime: 380, speechScore: 65, fineMotor: 61 },
     trend: [
       { day: "D1", hrv: 22, jerk: 68, speech: 52, risk: 4 },
@@ -88,6 +105,13 @@ const PATIENTS = [
     riskLevel: "LOW",
     alert: false,
     alertMessage: null,
+    
+    // Segregated risk signals
+    risks: {
+      voice: null,
+      heartRate: null,
+    },
+    
     metrics: { hrv: 44, jerk: 28, reactionTime: 290, speechScore: 88, fineMotor: 82 },
     trend: [
       { day: "D1",  hrv: 28, jerk: 62, speech: 58, risk: 4 },
@@ -117,6 +141,13 @@ const PATIENTS = [
     riskLevel: "MODERATE",
     alert: false,
     alertMessage: null,
+    
+    // Segregated risk signals
+    risks: {
+      voice: null,
+      heartRate: null,
+    },
+    
     metrics: { hrv: 31, jerk: 55, reactionTime: 340, speechScore: 74, fineMotor: 68 },
     trend: [
       { day: "D1", hrv: 30, jerk: 58, speech: 70, risk: 3 },
@@ -627,6 +658,8 @@ function DoctorDashboard({ selected, setSelected }) {
             </div>
           )}
 
+
+
         </div>
       </div>
     </div>
@@ -637,20 +670,55 @@ function DoctorDashboard({ selected, setSelected }) {
 // PATIENT APP (phone simulation)
 // ─────────────────────────────────────────────
 function PatientApp({ patient }) {
-  const [chatStep, setChatStep] = useState(-1); // -1 = not started
-  const [shownMsgs, setShownMsgs] = useState([]);
+  const [screen, setScreen] = useState("home"); // home | checking-in | results
+  const [checkInResults, setCheckInResults] = useState(null);
 
-  const startChat = () => {
-    setChatStep(0);
-    setShownMsgs([patient.aiLog[0]]);
+  const handleCheckInComplete = (result) => {
+    console.log("Check-in completed:", result);
+    setCheckInResults(result);
+    setScreen("results");
+    
+    // Analyze voice metrics and store separately
+    if (result.voiceMetrics) {
+      const voiceAnalysis = analyzeVoiceMetrics(result.voiceMetrics);
+      
+      // Initialize risks object if not present
+      if (!patient.risks) {
+        patient.risks = {};
+      }
+      
+      // Store voice analysis data separately
+      patient.risks.voice = {
+        riskScore: voiceAnalysis.riskScore,
+        riskLabel: voiceAnalysis.riskLabel,
+        findings: voiceAnalysis.findings,
+        findingCount: voiceAnalysis.findingCount,
+        metrics: voiceAnalysis.metrics,
+        timestamp: voiceAnalysis.timestamp
+      };
+      
+      console.log("Voice analysis stored:", patient.risks.voice);
+    }
+    
+    // Store AI conversation log
+    if (result.aiLog) {
+      patient.aiLog = result.aiLog;
+    }
+    
+    // Store raw voice metrics for reference
+    if (result.voiceMetrics) {
+      patient.voiceMetrics = result.voiceMetrics;
+    }
   };
 
-  const nextMsg = () => {
-    const next = chatStep + 1;
-    if (next < patient.aiLog.length) {
-      setChatStep(next);
-      setShownMsgs((prev) => [...prev, patient.aiLog[next]]);
-    }
+  const handleStartCheckIn = () => {
+    setCheckInResults(null);
+    setScreen("checking-in");
+  };
+
+  const handleBackToHome = () => {
+    setScreen("home");
+    setCheckInResults(null);
   };
 
   const scoreCol =
@@ -661,7 +729,7 @@ function PatientApp({ patient }) {
   return (
     <div className="flex items-center justify-center min-h-full bg-gray-200 py-6">
       {/* Phone frame */}
-      <div className="w-96 bg-white rounded-3xl shadow-2xl border border-gray-300 overflow-hidden flex flex-col">
+      <div key={patient.id} className="w-96 bg-white rounded-3xl shadow-2xl border border-gray-300 overflow-hidden flex flex-col">
         {/* Status bar */}
         <div className="bg-gray-900 px-5 pt-3 pb-2 flex justify-between items-center shrink-0">
           <span className="text-white text-xs font-medium">9:41 AM</span>
@@ -689,101 +757,150 @@ function PatientApp({ patient }) {
         </div>
 
         {/* Scrollable body */}
-        <div className="flex-1 overflow-y-auto p-4 space-y-4 bg-gray-50">
+        <div className="flex-1 overflow-y-auto overflow-x-hidden p-4 space-y-4 bg-gray-50">
 
-          {/* Wristband status */}
-          <div className="flex items-center gap-3 bg-green-50 rounded-xl p-3 border border-green-100">
-            <Activity size={16} className="text-green-600 shrink-0" />
-            <div className="flex-1">
-              <p className="text-sm font-semibold text-green-700">Wristband Connected</p>
-              <p className="text-xs text-green-500">HRV {patient.metrics.hrv}ms · Syncing every 30s</p>
-            </div>
-            <span className="w-2 h-2 bg-green-400 rounded-full animate-pulse" />
-          </div>
-
-          {/* Quick metrics */}
-          <div className="grid grid-cols-3 gap-2">
-            {[
-              { icon: Heart,    label: "HRV",      val: `${patient.metrics.hrv}ms`,          color: "bg-pink-50",   ic: "text-pink-500" },
-              { icon: Mic,      label: "Speech",   val: `${patient.metrics.speechScore}/100`, color: "bg-blue-50",   ic: "text-blue-500" },
-              { icon: Activity, label: "Response", val: `${patient.metrics.reactionTime}ms`,  color: "bg-purple-50", ic: "text-purple-500" },
-            ].map(({ icon: I, label, val, color, ic }) => (
-              <div key={label} className={`${color} rounded-xl p-2.5 text-center`}>
-                <I size={14} className={`${ic} mx-auto mb-1`} />
-                <p className="text-xs font-bold text-gray-800">{val}</p>
-                <p className="text-xs text-gray-400">{label}</p>
-              </div>
-            ))}
-          </div>
-
-          {/* Recovery trend */}
-          <div className="bg-white rounded-xl p-3 border border-gray-100">
-            <p className="text-xs font-semibold text-gray-600 mb-2">Recovery Trend</p>
-            <ResponsiveContainer width="100%" height={80}>
-              <AreaChart data={patient.trend}>
-                <defs>
-                  <linearGradient id="pg" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="5%"  stopColor="#3b82f6" stopOpacity={0.3} />
-                    <stop offset="95%" stopColor="#3b82f6" stopOpacity={0} />
-                  </linearGradient>
-                </defs>
-                <Area type="monotone" dataKey="risk" stroke="#3b82f6" fill="url(#pg)" strokeWidth={2} />
-                <XAxis dataKey="day" tick={{ fontSize: 8 }} />
-                <YAxis domain={[1, 5]} hide />
-                <Tooltip contentStyle={{ fontSize: "10px" }} />
-              </AreaChart>
-            </ResponsiveContainer>
-          </div>
-
-          {/* Medications */}
-          <div className="bg-white rounded-xl border border-gray-100 p-3">
-            <p className="text-xs font-semibold text-gray-600 mb-2">💊 Today's Medications</p>
-            <div className="space-y-2">
-              {patient.medications.map((m, i) => (
-                <div key={i} className="flex items-center gap-2">
-                  <CheckCircle size={14} className="text-green-500 shrink-0" />
-                  <p className="text-xs text-gray-700">{m}</p>
+          {/* HOME SCREEN */}
+          {screen === "home" && (
+            <>
+              {/* Wristband status */}
+              <div className="flex items-center gap-3 bg-green-50 rounded-xl p-3 border border-green-100">
+                <Activity size={16} className="text-green-600 shrink-0" />
+                <div className="flex-1">
+                  <p className="text-sm font-semibold text-green-700">Wristband Connected</p>
+                  <p className="text-xs text-green-500">HRV {patient.metrics.hrv}ms · Syncing every 30s</p>
                 </div>
-              ))}
-            </div>
-          </div>
+                <span className="w-2 h-2 bg-green-400 rounded-full animate-pulse" />
+              </div>
 
-          {/* AI check-in */}
-          {chatStep === -1 ? (
-            <button
-              onClick={startChat}
-              className="w-full bg-blue-600 text-white rounded-xl py-3 flex items-center justify-center gap-2 font-semibold text-sm hover:bg-blue-700 transition-colors"
-            >
-              <Mic size={15} />
-              Start Daily AI Check-in
-            </button>
-          ) : (
-            <div className="bg-blue-50 rounded-xl border border-blue-100 p-3">
-              <p className="text-xs font-semibold text-blue-700 mb-2 flex items-center gap-1">
-                <Brain size={11} /> AI Check-in
-              </p>
-              <div className="space-y-2 mb-2">
-                {shownMsgs.map((m, i) => (
-                  <div key={i} className={`flex ${m.role === "Patient" ? "justify-end" : "justify-start"}`}>
-                    <div className={`max-w-xs px-3 py-1.5 rounded-xl text-xs
-                      ${m.role === "AI" ? "bg-white text-gray-800" : "bg-blue-600 text-white"}`}>
-                      {m.text}
-                    </div>
+              {/* Quick metrics */}
+              <div className="grid grid-cols-3 gap-2">
+                {[
+                  { icon: Heart,    label: "HRV",      val: `${patient.metrics.hrv}ms`,          color: "bg-pink-50",   ic: "text-pink-500" },
+                  { icon: Mic,      label: "Speech",   val: `${patient.metrics.speechScore}/100`, color: "bg-blue-50",   ic: "text-blue-500" },
+                  { icon: Activity, label: "Response", val: `${patient.metrics.reactionTime}ms`,  color: "bg-purple-50", ic: "text-purple-500" },
+                ].map(({ icon: I, label, val, color, ic }) => (
+                  <div key={label} className={`${color} rounded-xl p-2.5 text-center`}>
+                    <I size={14} className={`${ic} mx-auto mb-1`} />
+                    <p className="text-xs font-bold text-gray-800">{val}</p>
+                    <p className="text-xs text-gray-400">{label}</p>
                   </div>
                 ))}
               </div>
-              {chatStep < patient.aiLog.length - 1 && (
-                <button
-                  onClick={nextMsg}
-                  className="w-full text-center text-xs text-blue-600 font-medium py-1.5 bg-white rounded-lg hover:bg-blue-50 transition-colors"
-                >
-                  Continue →
-                </button>
-              )}
-              {chatStep >= patient.aiLog.length - 1 && (
-                <p className="text-center text-xs text-green-600 font-medium">✓ Check-in complete</p>
-              )}
-            </div>
+
+              {/* Recovery trend */}
+              <div className="bg-white rounded-xl p-3 border border-gray-100">
+                <p className="text-xs font-semibold text-gray-600 mb-2">Recovery Trend</p>
+                <ResponsiveContainer width="100%" height={80}>
+                  <AreaChart data={patient.trend}>
+                    <defs>
+                      <linearGradient id="pg" x1="0" y1="0" x2="0" y2="1">
+                        <stop offset="5%"  stopColor="#3b82f6" stopOpacity={0.3} />
+                        <stop offset="95%" stopColor="#3b82f6" stopOpacity={0} />
+                      </linearGradient>
+                    </defs>
+                    <Area type="monotone" dataKey="risk" stroke="#3b82f6" fill="url(#pg)" strokeWidth={2} />
+                    <XAxis dataKey="day" tick={{ fontSize: 8 }} />
+                    <YAxis domain={[1, 5]} hide />
+                    <Tooltip contentStyle={{ fontSize: "10px" }} />
+                  </AreaChart>
+                </ResponsiveContainer>
+              </div>
+
+              {/* Medications */}
+              <div className="bg-white rounded-xl border border-gray-100 p-3">
+                <p className="text-xs font-semibold text-gray-600 mb-2">💊 Today's Medications</p>
+                <div className="space-y-2">
+                  {patient.medications.map((m, i) => (
+                    <div key={i} className="flex items-center gap-2">
+                      <CheckCircle size={14} className="text-green-500 shrink-0" />
+                      <p className="text-xs text-gray-700">{m}</p>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              {/* Start Check-in Button */}
+              <button
+                onClick={handleStartCheckIn}
+                className="w-full bg-blue-600 text-white rounded-xl py-3 flex items-center justify-center gap-2 font-semibold text-sm hover:bg-blue-700 transition-colors"
+              >
+                <Mic size={15} />
+                Start Daily Check-in
+              </button>
+            </>
+          )}
+
+          {/* CHECK-IN SCREEN */}
+          {screen === "checking-in" && (
+            <VoiceCheckIn 
+              patient={patient} 
+              onComplete={handleCheckInComplete}
+            />
+          )}
+
+          {/* RESULTS SCREEN */}
+          {screen === "results" && checkInResults && (
+            <>
+              <div className="bg-green-50 rounded-xl p-4 border border-green-200 flex items-center justify-center gap-2">
+                <CheckCircle size={20} className="text-green-600" />
+                <p className="text-sm font-semibold text-green-700">
+                  Check-in Complete! ✓
+                </p>
+              </div>
+
+              <div className="bg-white rounded-xl border border-gray-100 p-4 space-y-4">
+                <div>
+                  <p className="text-xs font-semibold text-gray-700 uppercase mb-3">
+                    📊 Session Summary
+                  </p>
+                  <div className="space-y-2">
+                    <div className="flex justify-between text-sm">
+                      <span className="text-gray-600">Questions Answered:</span>
+                      <span className="font-semibold text-gray-800">{checkInResults.aiLog?.filter(m => m.role === "Patient").length || 0} / 4</span>
+                    </div>
+                    <div className="flex justify-between text-sm">
+                      <span className="text-gray-600">Session Duration:</span>
+                      <span className="font-semibold text-gray-800">{checkInResults.voiceMetrics?.reduce((sum, m) => sum + m.duration, 0).toFixed(1)}s</span>
+                    </div>
+                    <div className="flex justify-between text-sm">
+                      <span className="text-gray-600">Average Speech Rate:</span>
+                      <span className="font-semibold text-gray-800">
+                        {Math.round(checkInResults.voiceMetrics?.reduce((sum, m) => sum + m.speechRate.wordsPerMinute, 0) / (checkInResults.voiceMetrics?.length || 1)) || 0} WPM
+                      </span>
+                    </div>
+                    <div className="flex justify-between text-sm">
+                      <span className="text-gray-600">Total Hesitations:</span>
+                      <span className="font-semibold text-gray-800">
+                        {checkInResults.voiceMetrics?.reduce((sum, m) => sum + m.hesitations.pauseCount, 0) || 0}
+                      </span>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="border-t border-gray-100 pt-4">
+                  <p className="text-xs font-semibold text-gray-700 uppercase mb-2">
+                    🎙️ Conversation
+                  </p>
+                  <div className="space-y-2 max-h-48 overflow-y-auto">
+                    {checkInResults.aiLog?.map((m, i) => (
+                      <div key={i} className={`flex ${m.role === "Patient" ? "justify-end" : "justify-start"}`}>
+                        <div className={`max-w-xs px-3 py-1.5 rounded-xl text-xs
+                          ${m.role === "AI" ? "bg-gray-100 text-gray-800" : "bg-blue-600 text-white"}`}>
+                          {m.text}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              </div>
+
+              <button
+                onClick={handleBackToHome}
+                className="w-full bg-gray-600 text-white rounded-xl py-3 font-semibold hover:bg-gray-700 transition-colors flex items-center justify-center gap-2"
+              >
+                ← Back to Home
+              </button>
+            </>
           )}
 
         </div>
