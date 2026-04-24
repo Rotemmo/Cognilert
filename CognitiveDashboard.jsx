@@ -204,6 +204,19 @@ function computeHRRisk(hrData) {
   return 1;
 }
 
+function generateVoiceAlerts(voiceAnalysis, patientName) {
+  if (!voiceAnalysis?.findings?.length) return [];
+  
+  const now = new Date();
+  const timeStr = `${String(now.getHours()).padStart(2,"0")}:${String(now.getMinutes()).padStart(2,"0")}`;
+  
+  return voiceAnalysis.findings.map(finding => ({
+    time: timeStr,
+    msg: `Voice: ${finding.description}`,
+    sev: finding.severity >= 2 ? "HIGH" : finding.severity === 1 ? "MED" : "LOW"
+  }));
+}
+
 function computeCompositeScore(gaitRisk, voiceRisk, hrRisk) {
   if (voiceRisk !== null) {
     return Math.min(5, Math.max(1, gaitRisk * 0.40 + voiceRisk * 0.35 + hrRisk * 0.25));
@@ -411,7 +424,7 @@ function SubScoreCard({ icon: Icon, iconColor, label, tooltip, score, riskLabel,
 // ─────────────────────────────────────────────
 // DOCTOR DASHBOARD
 // ─────────────────────────────────────────────
-function DoctorDashboard({ selected, setSelected, liveVoiceResults, recentVoicePatientId }) {
+function DoctorDashboard({ selected, setSelected, liveVoiceResults, voiceAlerts, recentVoicePatientId }) {
   const [tab, setTab] = useState("overview");
   const c = riskColors[selected.riskLevel];
 
@@ -425,6 +438,7 @@ function DoctorDashboard({ selected, setSelected, liveVoiceResults, recentVoiceP
   const hrAlerts   = hrData.alerts.filter((a) => a.severity >= 3).slice(0, 6);
 
   const voiceResult    = liveVoiceResults?.[selected.id] ?? null;
+  const voiceAlertsForSelected = voiceAlerts?.[selected.id] ?? [];
   const isVoiceLive    = !!voiceResult;
   const showFlash      = recentVoicePatientId === selected.id;
   const compositeScore = computeCompositeScore(selected.gait.riskScore, voiceResult?.riskScore ?? null, hrRisk);
@@ -553,7 +567,7 @@ function DoctorDashboard({ selected, setSelected, liveVoiceResults, recentVoiceP
           {[
             { key: "overview", label: "Overview" },
             { key: "trends",   label: "Trends" },
-            { key: "alerts",   label: `Alerts${(selected.alerts.length + hrAlerts.length) > 0 ? ` (${selected.alerts.length + hrAlerts.length})` : ""}` },
+            { key: "alerts",   label: `Alerts${(selected.alerts.length + hrAlerts.length + voiceAlertsForSelected.length) > 0 ? ` (${selected.alerts.length + hrAlerts.length + voiceAlertsForSelected.length})` : ""}` },
             { key: "ailog",    label: "AI Conversation" },
           ].map(({ key, label }) => (
             <button
@@ -744,7 +758,7 @@ function DoctorDashboard({ selected, setSelected, liveVoiceResults, recentVoiceP
           {/* ── ALERTS ── */}
           {tab === "alerts" && (
             <div className="space-y-3">
-              {selected.alerts.length === 0 && hrAlerts.length === 0 ? (
+              {selected.alerts.length === 0 && hrAlerts.length === 0 && voiceAlertsForSelected.length === 0 ? (
                 <div className="text-center py-16">
                   <CheckCircle size={44} className="mx-auto mb-3 text-green-400" />
                   <p className="text-sm font-semibold text-green-600">No alerts - patient recovering within normal range</p>
@@ -772,6 +786,30 @@ function DoctorDashboard({ selected, setSelected, liveVoiceResults, recentVoiceP
                               a.sev === "MED"  ? "bg-yellow-100 text-yellow-700" :
                               a.sev === "LOW"  ? "bg-gray-100 text-gray-600" :
                               "bg-blue-50 text-blue-600"}`}>
+                            {a.sev}
+                          </span>
+                        </div>
+                      ))}
+                    </>
+                  )}
+                  {voiceAlertsForSelected.length > 0 && (
+                    <>
+                      <p className="text-xs font-semibold text-gray-400 uppercase tracking-wider pt-2">
+                        Voice Alerts ({voiceAlertsForSelected.length})
+                      </p>
+                      {voiceAlertsForSelected.map((a, i) => (
+                        <div key={`voice-${i}`} className={`bg-white rounded-xl border p-4 flex items-start gap-3
+                          ${a.sev === "HIGH" ? "border-red-200" : a.sev === "MED" ? "border-yellow-200" : "border-blue-200"}`}>
+                          <div className={`p-2 rounded-lg shrink-0
+                            ${a.sev === "HIGH" ? "bg-red-100" : a.sev === "MED" ? "bg-yellow-100" : "bg-blue-50"}`}>
+                            <Mic size={16} className={a.sev === "HIGH" ? "text-red-500" : a.sev === "MED" ? "text-yellow-500" : "text-blue-400"} />
+                          </div>
+                          <div className="flex-1">
+                            <p className="text-sm font-medium text-gray-800">{a.msg}</p>
+                            <p className="text-xs text-gray-400 mt-0.5">{a.time}</p>
+                          </div>
+                          <span className={`text-xs font-bold px-2 py-0.5 rounded shrink-0
+                            ${a.sev === "HIGH" ? "bg-red-100 text-red-700" : a.sev === "MED" ? "bg-yellow-100 text-yellow-700" : "bg-blue-100 text-blue-700"}`}>
                             {a.sev}
                           </span>
                         </div>
@@ -1109,12 +1147,18 @@ export default function CogniLert() {
   const [selected, setSelected] = useState(PATIENTS[0]);
   const [patientId, setPatientId] = useState(3);
   const [liveVoiceResults, setLiveVoiceResults] = useState({});
+  const [voiceAlerts, setVoiceAlerts] = useState({});
   const [recentVoicePatientId, setRecentVoicePatientId] = useState(null);
 
   const patientViewPatient = PATIENTS.find((p) => p.id === patientId);
 
   const handleVoiceComplete = useCallback((pid, voiceAnalysis) => {
     setLiveVoiceResults(prev => ({ ...prev, [pid]: voiceAnalysis }));
+    
+    // Generate voice alerts from findings
+    const newAlerts = generateVoiceAlerts(voiceAnalysis);
+    setVoiceAlerts(prev => ({ ...prev, [pid]: newAlerts }));
+    
     setRecentVoicePatientId(pid);
     // Auto-switch doctor panel to the patient who just completed
     const updatedPatient = PATIENTS.find(p => p.id === pid);
@@ -1179,6 +1223,7 @@ export default function CogniLert() {
             selected={selected}
             setSelected={setSelected}
             liveVoiceResults={liveVoiceResults}
+            voiceAlerts={voiceAlerts}
             recentVoicePatientId={recentVoicePatientId}
           />
         ) : (
