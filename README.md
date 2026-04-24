@@ -15,7 +15,7 @@ All sensor data is synthesized — no real wearable or backend yet. The heart ra
 | Signal | Status |
 |--------|--------|
 | Heart Rate (HR / HRV) | Synthesized + analyzed |
-| Steps | Planned |
+| Gait (stride intervals) | Real dataset + analyzed |
 | AI voice conversations | Mocked |
 
 ## Architecture
@@ -26,6 +26,13 @@ src/analysis/heartRate/
   analyzer.js    →  detects tachycardia, bradycardia, HRV anomalies, baseline deviation
   alerts.js      →  converts findings into severity-scored alerts (1–5 scale)
   index.js       →  runHRAnalysis(patient, days) — full pipeline
+
+src/analysis/gait/
+  strideData.js  →  real stride-interval data
+  simulator.js   →  selects 30-stride windows; each seed yields a new reading
+  analyzer.js    →  detects dysrhythmia, freezing-of-gait, trend deterioration
+  alerts.js      →  converts findings into severity-scored alerts (1–5 scale)
+  index.js       →  runGaitAnalysis(patient, seed) — full pipeline
 
 CognitiveDashboard.jsx
   DoctorDashboard   →  Overview · Trends · Alerts · AI Conversation
@@ -64,7 +71,7 @@ Open [http://localhost:5173](http://localhost:5173).
 
 ## Planned
 
-- Steps analysis module (daily step count vs. baseline)
+- Real wearable integration for gait (replace simulator with BLE accelerometer stream)
 - AI voice conversation transcript analysis (speech coherence, semantic drift)
 - Real wearable integration (HRV, accelerometer over BLE / REST)
 - Backend risk scoring model fusing all signal layers
