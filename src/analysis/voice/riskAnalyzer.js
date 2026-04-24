@@ -8,8 +8,8 @@ const THRESHOLDS = {
   speechRate:   { minWpm: 60   },  // <60 WPM is abnormally slow
   hesitations:  { maxAvgPauses: 8 }, // >8 pauses per response on average
   energy:       { minDb: -45   },  // <-45 dB is very quiet / mumbling
-  duration:     { minAvgSec: 2.5 }, // <2.5s average response is too brief
-  trendDrop:    { wpmDrop: 30  },  // >30 WPM decline from Q1 to Q4
+  duration:     { minAvgSec: 1.5 }, // <1.5s average response is too brief
+  trendDrop:    { wpmDrop: 50  },  // >50 WPM decline from Q1 to Q4
 };
 
 function generateFindings(voiceMetricsArray) {
@@ -61,11 +61,11 @@ function generateFindings(voiceMetricsArray) {
     const firstWpm = voiceMetricsArray[0].speechRate?.wordsPerMinute || 0;
     const lastWpm  = voiceMetricsArray[n - 1].speechRate?.wordsPerMinute || 0;
     const drop = firstWpm - lastWpm;
-    if (firstWpm > 0 && drop > THRESHOLDS.trendDrop.wpmDrop) {
+    if (firstWpm > 0 && lastWpm > 0 && drop > THRESHOLDS.trendDrop.wpmDrop) {
       findings.push({
         type: "trend_deteriorating",
         description: `Speech pace declined during session (−${Math.round(drop)} WPM from Q1 to Q${n})`,
-        severity: 2,
+        severity: 1,
       });
     }
   }

@@ -870,15 +870,20 @@ function DoctorDashboard({ selected, setSelected, liveVoiceResults, voiceAlerts,
                       <p className="text-xs text-gray-500">Hesitations</p>
                     </div>
                     <div className="bg-white/70 rounded-lg p-3 text-center">
-                      <p className="text-lg font-bold text-gray-800">{voiceResult.findingCount}</p>
+                      <p className="text-lg font-bold text-gray-800">{(voiceResult.findingCount ?? 0) + (voiceResult.contentFindings?.length ?? 0)}</p>
                       <p className="text-xs text-gray-500">Findings</p>
                     </div>
                   </div>
-                  {voiceResult.findings?.length > 0 && (
+                  {(voiceResult.findings?.length > 0 || voiceResult.contentFindings?.length > 0) && (
                     <div className="mt-3 space-y-1.5">
-                      {voiceResult.findings.map((f, i) => (
-                        <div key={i} className="bg-white/70 rounded-lg px-3 py-2 text-xs text-gray-700 font-medium">
-                          {f.description}
+                      {voiceResult.findings?.map((f, i) => (
+                        <div key={`audio-${i}`} className="bg-white/70 rounded-lg px-3 py-2 text-xs text-gray-700 font-medium">
+                          🎙 {f.description}
+                        </div>
+                      ))}
+                      {voiceResult.contentFindings?.map((f, i) => (
+                        <div key={`content-${i}`} className={`rounded-lg px-3 py-2 text-xs font-medium ${f.severity >= 2 ? "bg-red-100 text-red-700" : "bg-yellow-50 text-yellow-700"}`}>
+                          🧠 {f.description}
                         </div>
                       ))}
                     </div>
@@ -938,7 +943,10 @@ function PatientApp({ patient, onVoiceComplete }) {
     setScreen("results");
 
     if (result.voiceMetrics) {
-      const voiceAnalysis = analyzeVoiceMetrics(result.voiceMetrics);
+      const voiceAnalysis = {
+        ...analyzeVoiceMetrics(result.voiceMetrics),
+        contentFindings: result.contentFindings ?? [],
+      };
 
       // Lift to root so doctor dashboard updates live
       onVoiceComplete(patient.id, voiceAnalysis);
@@ -1154,9 +1162,16 @@ export default function CogniLert() {
 
   const handleVoiceComplete = useCallback((pid, voiceAnalysis) => {
     setLiveVoiceResults(prev => ({ ...prev, [pid]: voiceAnalysis }));
-    
-    // Generate voice alerts from findings
-    const newAlerts = generateVoiceAlerts(voiceAnalysis);
+
+    // Merge audio findings + LLM content findings into alerts
+    const analysisWithContent = {
+      ...voiceAnalysis,
+      findings: [
+        ...(voiceAnalysis.findings ?? []),
+        ...(voiceAnalysis.contentFindings ?? []),
+      ],
+    };
+    const newAlerts = generateVoiceAlerts(analysisWithContent);
     setVoiceAlerts(prev => ({ ...prev, [pid]: newAlerts }));
     
     setRecentVoicePatientId(pid);

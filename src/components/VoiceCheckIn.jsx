@@ -149,7 +149,7 @@ export function VoiceCheckIn({ patient, onComplete }) {
       ]);
 
       // Generate next question
-      const nextQ = agentRef.current.generateNextQuestion(transcribedText);
+      const nextQ = await agentRef.current.generateNextQuestion(transcribedText);
       setQuestionCount((prev) => prev + 1);
 
       if (nextQ) {
@@ -185,15 +185,17 @@ export function VoiceCheckIn({ patient, onComplete }) {
   /**
    * Save results to patient record
    */
-  function handleSaveResults() {
+  async function handleSaveResults() {
     const summary = agentRef.current.getSummary();
-    console.log("Check-in complete:", summary);
-    console.log("All voice metrics:", allMetricsRef.current);
+
+    const contentFindings = await agentRef.current.analyzeConversationContent();
+    console.log("[VoiceCheckIn] Content findings:", contentFindings);
 
     if (onComplete) {
       onComplete({
         aiLog: summary.conversation,
         voiceMetrics: allMetricsRef.current,
+        contentFindings,
         timestamp: new Date().toISOString(),
       });
     }
