@@ -4,16 +4,15 @@
  * Usage:
  *   import { runGaitAnalysis } from './gait';
  *
- *   const { result, alerts, summary } = runGaitAnalysis(patient);
+ *   const { result, alerts, summary } = runGaitAnalysis(patient, seed);
  *
- * The patient object must have:
- *   patient.gait.samples       — stride interval array (seconds)
- *   patient.gait.sessionCv     — CV% from full session (authoritative, from wearable)
- *   patient.gait.sessionMean   — mean stride from full session (authoritative)
- *   patient.gait.freezingCount — freezing-of-gait events in full session (default 0)
+ * seed = 0 (default): baseline window (first 30 strides of the dataset)
+ * seed > 0:           new 30-stride window from the full sensor dataset,
+ *                     simulating a fresh measurement from the wearable
  */
 
-export { analyzeGaitSession } from './analyzer.js';
+export { analyzeGaitSession }    from './analyzer.js';
+export { generateGaitSession }   from './simulator.js';
 export {
   generateAlerts,
   generateAlertHistory,
@@ -21,32 +20,19 @@ export {
   summarizeAlerts,
 } from './alerts.js';
 
-import { analyzeGaitSession } from './analyzer.js';
+import { analyzeGaitSession }  from './analyzer.js';
+import { generateGaitSession } from './simulator.js';
 import { generateAlerts, summarizeAlerts } from './alerts.js';
 
 /**
- * Build a GaitSession object from a patient record.
- * Mirrors the role of generateHRSession() in the HR pipeline.
- */
-function createGaitSession(patient) {
-  return {
-    patientId:     patient.id,
-    dayPostOp:     patient.dayPost,
-    samples:       patient.gait.samples,
-    sessionCv:     patient.gait.sessionCv,
-    sessionMean:   patient.gait.sessionMean,
-    freezingCount: patient.gait.freezingCount ?? 0,
-  };
-}
-
-/**
- * Full pipeline: package session → analyze → generate alerts.
+ * Full pipeline: generate session window → analyze → alerts.
  *
  * @param {object} patient
+ * @param {number} seed    — 0 = baseline; increment for new measurement window
  * @returns {{ result, alerts, summary }}
  */
-export function runGaitAnalysis(patient) {
-  const session = createGaitSession(patient);
+export function runGaitAnalysis(patient, seed = 0) {
+  const session = generateGaitSession(patient, seed);
   const result  = analyzeGaitSession(session);
   const alerts  = generateAlerts(result, patient);
   const summary = summarizeAlerts(alerts);

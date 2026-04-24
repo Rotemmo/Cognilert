@@ -1,4 +1,4 @@
-import { useState, useMemo, useEffect, useCallback } from "react";
+import { useState, useMemo, useEffect, useCallback, useRef } from "react";
 import {
   LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ReferenceLine,
   ResponsiveContainer, AreaChart, Area
@@ -239,7 +239,41 @@ function InfoTooltip({ text, children }) {
 function GaitVisualizer({ gaitProfile }) {
   const { samples, mean, cv, consistencyScore, riskLabel, interpretation, event } = gaitProfile;
 
-  // Exaggerate spacing differences (×3) so irregular gait is visually obvious
+  // --- Animation state ---
+  const [visibleCount, setVisibleCount] = useState(0);
+  const svgContainerRef = useRef(null);
+
+  useEffect(() => {
+    const el = svgContainerRef.current;
+    if (!el) return;
+
+    // Scale actual stride intervals so total animation is ~5 seconds
+    const totalRealMs = samples.reduce((s, v) => s + v, 0) * 1000;
+    const scale = 5000 / totalRealMs;
+    const handles = [];
+
+    const kick = () => {
+      setVisibleCount(0);
+      let cum = 120; // brief pause so the cleared state renders first
+      samples.forEach((interval, i) => {
+        handles.push(setTimeout(() => setVisibleCount(i + 1), cum));
+        cum += Math.round(interval * 1000 * scale);
+      });
+    };
+
+    const observer = new IntersectionObserver(
+      ([entry]) => { if (entry.isIntersecting) { kick(); observer.disconnect(); } },
+      { threshold: 0.25 }
+    );
+    observer.observe(el);
+
+    return () => {
+      observer.disconnect();
+      handles.forEach(clearTimeout);
+    };
+  }, []); // empty deps — parent passes key={seed} so this remounts on each refresh
+
+  // --- Geometry ---
   const exaggerated = samples.map(v => 1 + ((v - mean) / mean) * 3);
   const totalEff = exaggerated.reduce((s, v) => s + v, 0);
 
@@ -294,9 +328,9 @@ function GaitVisualizer({ gaitProfile }) {
           </InfoTooltip>
           <span className="text-gray-400 font-normal ml-2">(spacing proportional to stride interval)</span>
         </p>
-        <svg width="100%" height="92" viewBox="0 0 600 92" preserveAspectRatio="xMidYMid meet">
+        <svg ref={svgContainerRef} width="100%" height="92" viewBox="0 0 600 92" preserveAspectRatio="xMidYMid meet">
           <line x1="0" y1="44" x2="600" y2="44" stroke="#e5e7eb" strokeWidth="1" />
-          {footprints.map((fp, i) => (
+          {footprints.slice(0, visibleCount).map((fp, i) => (
             <g key={i}>
               <polygon
                 points={`${fp.x - 9},${fp.y - 8} ${fp.x + 9},${fp.y} ${fp.x - 9},${fp.y + 8}`}
@@ -357,7 +391,7 @@ function GaitVisualizer({ gaitProfile }) {
 // ─────────────────────────────────────────────
 // SUBSCORE CARD
 // ─────────────────────────────────────────────
-function SubScoreCard({ icon: Icon, iconColor, label, tooltip, score, riskLabel, detail, isLive, pending }) {
+function SubScoreCard({ icon: Icon, iconColor, label, tooltip, score, riskLabel, detail, isLive, pending, onRefresh }) {
   if (pending) {
     return (
       <div className="bg-white rounded-xl p-5 border-2 border-dashed border-gray-200 flex flex-col items-center justify-center gap-2 min-h-[130px]">
@@ -393,6 +427,17 @@ function SubScoreCard({ icon: Icon, iconColor, label, tooltip, score, riskLabel,
         {riskLabel}
       </span>
       {detail && <p className="text-xs text-gray-500 mt-1.5">{detail}</p>}
+      {onRefresh && (
+        <button
+          onClick={onRefresh}
+          className="mt-3 w-full flex items-center justify-center gap-1.5 py-1.5 rounded-lg text-xs font-semibold text-teal-700 bg-teal-50 hover:bg-teal-100 border border-teal-200 transition-colors"
+        >
+          <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+            <polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/>
+          </svg>
+          New reading
+        </button>
+      )}
     </div>
   );
 }
@@ -402,10 +447,16 @@ function SubScoreCard({ icon: Icon, iconColor, label, tooltip, score, riskLabel,
 // ─────────────────────────────────────────────
 function DoctorDashboard({ selected, setSelected, liveVoiceResults, recentVoicePatientId }) {
   const [tab, setTab] = useState("overview");
+  const [gaitSeeds, setGaitSeeds] = useState({});
   const c = riskColors[selected.riskLevel];
 
-  const hrData     = useMemo(() => runHRAnalysis(selected, 7),  [selected.id]);
-  const gaitData   = useMemo(() => runGaitAnalysis(selected),   [selected.id]);
+  const gaitSeed = gaitSeeds[selected.id] ?? 0;
+  const handleGaitRefresh = useCallback(() => {
+    setGaitSeeds(prev => ({ ...prev, [selected.id]: (prev[selected.id] ?? 0) + 1 }));
+  }, [selected.id]);
+
+  const hrData     = useMemo(() => runHRAnalysis(selected, 7),          [selected.id]);
+  const gaitData   = useMemo(() => runGaitAnalysis(selected, gaitSeed), [selected.id, gaitSeed]);
   const todayHR    = hrData.analysisResults[hrData.analysisResults.length - 1];
   const hrRisk     = computeHRRisk(hrData);
   const hrTrendData = hrData.analysisResults.map((r) => ({
@@ -450,8 +501,13 @@ function DoctorDashboard({ selected, setSelected, liveVoiceResults, recentVoiceP
 
         <div className="flex-1 overflow-y-auto">
           {PATIENTS.map((p) => {
-            const pc = riskColors[p.riskLevel];
             const isSelected = p.id === selected.id;
+            const displayScore = isSelected ? compositeScore : p.riskScore;
+            const displayLabel = isSelected ? compositeLabel(compositeScore) : p.riskLevel;
+            const colorKey = displayLabel === "CRITICAL" || displayLabel === "HIGH" ? "HIGH"
+                           : displayLabel === "LOW"      || displayLabel === "EXCELLENT" ? "LOW"
+                           : "MODERATE";
+            const pc = riskColors[colorKey];
             return (
               <button
                 key={p.id}
@@ -476,9 +532,11 @@ function DoctorDashboard({ selected, setSelected, liveVoiceResults, recentVoiceP
                   </div>
                   <div className="flex flex-col items-end gap-1">
                     <span className={`text-xs font-bold px-2 py-0.5 rounded-full text-white ${pc.badge}`}>
-                      {p.riskLevel}
+                      {displayLabel}
                     </span>
-                    <span className={`text-xs font-bold ${scoreColor(p.riskScore)}`}>{p.riskScore}</span>
+                    <span className={`text-xs font-bold ${scoreColor(Math.round(displayScore))}`}>
+                      {isSelected ? displayScore.toFixed(1) : displayScore}
+                    </span>
                   </div>
                 </div>
               </button>
@@ -621,6 +679,7 @@ function DoctorDashboard({ selected, setSelected, liveVoiceResults, recentVoiceP
                     detail={`Regularity: ${gaitData.result.consistencyScore}/100 · Variability: ${gaitData.result.cv}%`}
                     isLive={false}
                     pending={false}
+                    onRefresh={handleGaitRefresh}
                   />
                   <SubScoreCard
                     icon={Heart}
@@ -639,7 +698,7 @@ function DoctorDashboard({ selected, setSelected, liveVoiceResults, recentVoiceP
               {/* Gait visualization */}
               <div className="bg-white rounded-xl border border-gray-100 shadow-sm p-5">
                 <p className="text-sm font-semibold text-gray-700 mb-4">Gait Analysis - Real Sensor Data</p>
-                <GaitVisualizer gaitProfile={gaitData.result} />
+                <GaitVisualizer key={gaitSeed} gaitProfile={gaitData.result} />
               </div>
 
               {/* Recovery trend */}
