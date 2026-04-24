@@ -448,6 +448,7 @@ function SubScoreCard({ icon: Icon, iconColor, label, tooltip, score, riskLabel,
 function DoctorDashboard({ selected, setSelected, liveVoiceResults, recentVoicePatientId }) {
   const [tab, setTab] = useState("overview");
   const [gaitSeeds, setGaitSeeds] = useState({});
+  const [liveScores, setLiveScores] = useState({});
   const c = riskColors[selected.riskLevel];
 
   const gaitSeed = gaitSeeds[selected.id] ?? 0;
@@ -469,6 +470,13 @@ function DoctorDashboard({ selected, setSelected, liveVoiceResults, recentVoiceP
   const isVoiceLive    = !!voiceResult;
   const showFlash      = recentVoicePatientId === selected.id;
   const compositeScore = computeCompositeScore(gaitData.result.riskScore, voiceResult?.riskScore ?? null, hrRisk);
+
+  // Only push score to the sidebar when a refresh was explicitly triggered (seed > 0)
+  useEffect(() => {
+    if (gaitSeed > 0) {
+      setLiveScores(prev => ({ ...prev, [selected.id]: compositeScore }));
+    }
+  }, [gaitSeed]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const fmtAlertTime = (ts) => {
     const d = new Date(ts);
@@ -501,9 +509,10 @@ function DoctorDashboard({ selected, setSelected, liveVoiceResults, recentVoiceP
 
         <div className="flex-1 overflow-y-auto">
           {PATIENTS.map((p) => {
-            const isSelected = p.id === selected.id;
-            const displayScore = isSelected ? compositeScore : p.riskScore;
-            const displayLabel = isSelected ? compositeLabel(compositeScore) : p.riskLevel;
+            const isSelected  = p.id === selected.id;
+            const liveScore   = liveScores[p.id];
+            const displayScore = liveScore ?? p.riskScore;
+            const displayLabel = liveScore ? compositeLabel(liveScore) : p.riskLevel;
             const colorKey = displayLabel === "CRITICAL" || displayLabel === "HIGH" ? "HIGH"
                            : displayLabel === "LOW"      || displayLabel === "EXCELLENT" ? "LOW"
                            : "MODERATE";
@@ -535,7 +544,7 @@ function DoctorDashboard({ selected, setSelected, liveVoiceResults, recentVoiceP
                       {displayLabel}
                     </span>
                     <span className={`text-xs font-bold ${scoreColor(Math.round(displayScore))}`}>
-                      {isSelected ? displayScore.toFixed(1) : displayScore}
+                      {liveScore ? displayScore.toFixed(1) : displayScore}
                     </span>
                   </div>
                 </div>
