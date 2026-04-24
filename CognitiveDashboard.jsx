@@ -3,7 +3,8 @@ import {
   LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ReferenceLine,
   ResponsiveContainer, AreaChart, Area
 } from "recharts";
-import { runHRAnalysis } from "./src/analysis/heartRate/index.js";
+import { runHRAnalysis }   from "./src/analysis/heartRate/index.js";
+import { runGaitAnalysis } from "./src/analysis/gait/index.js";
 import { VoiceCheckIn } from "./src/components/VoiceCheckIn";
 import { analyzeVoiceMetrics } from "./src/analysis/voice/riskAnalyzer.js";
 import { saveVoiceAnalysis } from "./data/voiceStorage.js";
@@ -35,10 +36,7 @@ const PATIENTS = [
       samples: [1.373,1.383,1.283,1.407,1.310,1.373,1.330,1.273,1.310,1.180,
                 1.203,1.290,1.290,1.293,1.293,1.177,1.390,1.343,1.333,1.427,
                 1.410,1.123,1.343,1.383,1.383,1.273,1.377,1.387,1.397,1.247],
-      mean: 1.295, cv: 9.7, consistencyScore: 20, riskScore: 5,
-      riskLabel: "CRITICAL",
-      interpretation: "Severe gait dysrhythmia detected",
-      event: "Freezing-of-gait episode recorded (stride 43, duration 562ms)",
+      sessionCv: 9.7, sessionMean: 1.295, freezingCount: 1,
     },
     metrics: { hrv: 18, speechScore: 31 },
     trend: [
@@ -78,10 +76,7 @@ const PATIENTS = [
       samples: [1.350,1.360,1.377,1.540,1.407,1.323,1.267,1.280,1.250,1.207,
                 1.300,1.257,1.277,1.310,1.227,1.293,1.267,1.277,1.267,1.263,
                 1.180,1.183,1.240,1.227,1.220,1.293,1.230,1.237,1.317,1.223],
-      mean: 1.259, cv: 5.6, consistencyScore: 58, riskScore: 3,
-      riskLabel: "MODERATE",
-      interpretation: "Elevated stride variability - irregular motor rhythm",
-      event: null,
+      sessionCv: 5.6, sessionMean: 1.259, freezingCount: 0,
     },
     metrics: { hrv: 28, speechScore: 65 },
     trend: [
@@ -118,10 +113,7 @@ const PATIENTS = [
       samples: [1.023,1.030,1.017,1.027,1.043,1.027,1.007,1.047,1.033,1.043,
                 1.017,1.023,1.027,1.037,1.003,1.007,1.037,1.020,1.007,1.067,
                 1.023,1.023,1.017,1.023,1.030,1.017,1.020,1.010,1.017,1.023],
-      mean: 1.027, cv: 1.75, consistencyScore: 88, riskScore: 1,
-      riskLabel: "EXCELLENT",
-      interpretation: "Highly regular stride pattern - no cognitive motor signature",
-      event: null,
+      sessionCv: 1.75, sessionMean: 1.027, freezingCount: 0,
     },
     metrics: { hrv: 44, speechScore: 88 },
     trend: [
@@ -158,10 +150,7 @@ const PATIENTS = [
       samples: [0.980,0.997,0.967,0.973,0.983,0.983,0.990,0.973,0.993,1.017,
                 1.013,1.050,1.050,1.060,1.080,1.047,0.993,1.023,1.047,1.053,
                 1.073,1.000,0.993,1.003,1.000,0.977,0.980,0.987,0.997,0.957],
-      mean: 1.000, cv: 2.6, consistencyScore: 79, riskScore: 2,
-      riskLabel: "GOOD",
-      interpretation: "Normal post-surgical stride variability - within safe range",
-      event: null,
+      sessionCv: 2.6, sessionMean: 1.000, freezingCount: 0,
     },
     metrics: { hrv: 31, speechScore: 74 },
     trend: [
@@ -415,7 +404,8 @@ function DoctorDashboard({ selected, setSelected, liveVoiceResults, recentVoiceP
   const [tab, setTab] = useState("overview");
   const c = riskColors[selected.riskLevel];
 
-  const hrData     = useMemo(() => runHRAnalysis(selected, 7), [selected.id]);
+  const hrData     = useMemo(() => runHRAnalysis(selected, 7),  [selected.id]);
+  const gaitData   = useMemo(() => runGaitAnalysis(selected),   [selected.id]);
   const todayHR    = hrData.analysisResults[hrData.analysisResults.length - 1];
   const hrRisk     = computeHRRisk(hrData);
   const hrTrendData = hrData.analysisResults.map((r) => ({
@@ -427,7 +417,7 @@ function DoctorDashboard({ selected, setSelected, liveVoiceResults, recentVoiceP
   const voiceResult    = liveVoiceResults?.[selected.id] ?? null;
   const isVoiceLive    = !!voiceResult;
   const showFlash      = recentVoicePatientId === selected.id;
-  const compositeScore = computeCompositeScore(selected.gait.riskScore, voiceResult?.riskScore ?? null, hrRisk);
+  const compositeScore = computeCompositeScore(gaitData.result.riskScore, voiceResult?.riskScore ?? null, hrRisk);
 
   const fmtAlertTime = (ts) => {
     const d = new Date(ts);
@@ -626,9 +616,9 @@ function DoctorDashboard({ selected, setSelected, liveVoiceResults, recentVoiceP
                     iconColor="bg-teal-500"
                     label="Gait Consistency"
                     tooltip="Measures walking rhythm from a wearable sensor. Irregular step timing - even when invisible to the eye - is a proven early predictor of delirium and fall risk in post-surgical patients."
-                    score={selected.gait.riskScore}
-                    riskLabel={selected.gait.riskLabel}
-                    detail={`Regularity: ${selected.gait.consistencyScore}/100 · Variability: ${selected.gait.cv}%`}
+                    score={gaitData.result.riskScore}
+                    riskLabel={gaitData.result.riskLabel}
+                    detail={`Regularity: ${gaitData.result.consistencyScore}/100 · Variability: ${gaitData.result.cv}%`}
                     isLive={false}
                     pending={false}
                   />
@@ -649,7 +639,7 @@ function DoctorDashboard({ selected, setSelected, liveVoiceResults, recentVoiceP
               {/* Gait visualization */}
               <div className="bg-white rounded-xl border border-gray-100 shadow-sm p-5">
                 <p className="text-sm font-semibold text-gray-700 mb-4">Gait Analysis - Real Sensor Data</p>
-                <GaitVisualizer gaitProfile={selected.gait} />
+                <GaitVisualizer gaitProfile={gaitData.result} />
               </div>
 
               {/* Recovery trend */}
