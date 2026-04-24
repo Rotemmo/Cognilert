@@ -706,7 +706,7 @@ function DoctorDashboard({ selected, setSelected, liveVoiceResults, recentVoiceP
 
               {/* Gait visualization */}
               <div className="bg-white rounded-xl border border-gray-100 shadow-sm p-5">
-                <p className="text-sm font-semibold text-gray-700 mb-4">Gait Analysis - Real Sensor Data</p>
+                <p className="text-sm font-semibold text-gray-700 mb-4">Gait Analysis</p>
                 <GaitVisualizer key={gaitSeed} gaitProfile={gaitData.result} />
               </div>
 
