@@ -1007,7 +1007,7 @@ function PatientApp({ patient, onVoiceComplete }) {
       };
 
       // Lift to root so doctor dashboard updates live
-      onVoiceComplete(patient.id, voiceAnalysis);
+      onVoiceComplete(patient.id, voiceAnalysis, result.sessionAlerts ?? []);
 
       // Persist to local storage
       saveVoiceAnalysis(patient.id, voiceAnalysis, {
@@ -1218,7 +1218,7 @@ export default function CogniLert() {
 
   const patientViewPatient = PATIENTS.find((p) => p.id === patientId);
 
-  const handleVoiceComplete = useCallback((pid, voiceAnalysis) => {
+  const handleVoiceComplete = useCallback((pid, voiceAnalysis, sessionAlerts = []) => {
     setLiveVoiceResults(prev => ({ ...prev, [pid]: voiceAnalysis }));
 
     // Merge audio findings + LLM content findings into alerts
@@ -1230,7 +1230,16 @@ export default function CogniLert() {
       ],
     };
     const newAlerts = generateVoiceAlerts(analysisWithContent);
-    setVoiceAlerts(prev => ({ ...prev, [pid]: newAlerts }));
+
+    // Convert session alerts (from agent rules) to the same display format
+    const sevLabel = (s) => s >= 4 ? "HIGH" : s >= 3 ? "MED" : "LOW";
+    const agentAlerts = sessionAlerts.map((a) => ({
+      msg: a.description,
+      sev: sevLabel(a.severity),
+      time: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
+    }));
+
+    setVoiceAlerts(prev => ({ ...prev, [pid]: [...agentAlerts, ...newAlerts] }));
     
     setRecentVoicePatientId(pid);
     // Auto-switch doctor panel to the patient who just completed

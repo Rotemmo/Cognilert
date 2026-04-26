@@ -13,6 +13,12 @@ export class AIAgent {
     this.questionCount = 0;
     this.maxQuestions = 4;
     this.initialQuestion = this._buildInitialQuestion();
+
+    // Rule tracking
+    this.failedAttempts = 0;       // consecutive empty/unclear answers on current question
+    this.maxFailedAttempts = 3;
+    this.consecutiveShort = 0;     // consecutive hesitant/very-short answers
+    this.sessionAlerts = [];       // alerts accumulated during the check-in
   }
 
   _buildInitialQuestion() {
@@ -134,6 +140,64 @@ Return ONLY valid JSON, nothing else.`;
     }
   }
 
+  /**
+   * Evaluates an answer and returns what the agent should do next.
+   * Returns: { action: "repeat" | "alert_and_end" | "continue", alert: object|null }
+   */
+  evaluateAnswer(transcribedText) {
+    const isEmpty = !transcribedText || transcribedText.trim().length < 3 ||
+      transcribedText.includes("[Could not understand");
+
+    if (isEmpty) {
+      this.failedAttempts++;
+      if (this.failedAttempts >= this.maxFailedAttempts) {
+        this.sessionAlerts.push({
+          type: "NO_RESPONSE",
+          severity: 4,
+          description: `Patient did not respond to the same question after ${this.maxFailedAttempts} attempts`,
+        });
+        return { action: "alert_and_end", alert: this.sessionAlerts.at(-1) };
+      }
+      return { action: "repeat", alert: null };
+    }
+
+    // Got a real answer — reset failed attempts counter
+    this.failedAttempts = 0;
+
+    const flags = this.analyzeAnswer(transcribedText);
+
+    if (flags.confused) {
+      this.sessionAlerts.push({
+        type: "INCOHERENT_RESPONSE",
+        severity: 3,
+        description: "Patient gave an incoherent or contradictory answer: " + flags.concerningPatterns.join(", "),
+      });
+    }
+
+    if (flags.hesitant) {
+      this.consecutiveShort++;
+      if (this.consecutiveShort >= 2) {
+        this.sessionAlerts.push({
+          type: "MINIMAL_RESPONSES",
+          severity: 2,
+          description: `Patient gave very short answers for ${this.consecutiveShort} consecutive questions`,
+        });
+      }
+    } else {
+      this.consecutiveShort = 0;
+    }
+
+    if (flags.concerningPatterns.includes("Repetitive words")) {
+      this.sessionAlerts.push({
+        type: "REPETITIVE_SPEECH",
+        severity: 3,
+        description: "Repetitive word pattern detected in patient response",
+      });
+    }
+
+    return { action: "continue", alert: this.sessionAlerts.at(-1) ?? null };
+  }
+
   analyzeAnswer(answer) {
     const flags = {
       coherent: true,
@@ -171,6 +235,7 @@ Return ONLY valid JSON, nothing else.`;
       totalQuestions: this.questionCount,
       totalMessages: this.conversationHistory.length,
       conversation: this.conversationHistory,
+      sessionAlerts: this.sessionAlerts,
       timestamp: new Date().toISOString(),
     };
   }

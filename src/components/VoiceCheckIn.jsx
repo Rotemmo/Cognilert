@@ -137,11 +137,39 @@ export function VoiceCheckIn({ patient, onComplete }) {
         riskIndicators: risks,
       });
 
-      // Analyze answer with AI
-      const answerAnalysis = agentRef.current.analyzeAnswer(transcribedText);
-      console.log("Answer analysis:", answerAnalysis);
+      // Evaluate answer — checks for empty, incoherent, repetitive, short
+      const evaluation = agentRef.current.evaluateAnswer(transcribedText);
+      console.log("Answer evaluation:", evaluation);
 
-      // Add to history
+      if (evaluation.action === "repeat") {
+        // Empty/unclear — re-ask the same question
+        const attempt = agentRef.current.failedAttempts;
+        const retryMsg = attempt === 1
+          ? "I didn't catch that. Could you please repeat your answer?"
+          : "I'm still having trouble hearing you. Please try again.";
+        setConversationHistory((prev) => [...prev, { role: "AI", text: retryMsg }]);
+        setCurrentQuestion(retryMsg);
+        setTranscript("");
+        setStage("idle");
+        setLoading(false);
+        return;
+      }
+
+      if (evaluation.action === "alert_and_end") {
+        // 3 failed attempts — end and flag
+        agentRef.current.addMessage("Patient", "[No response]");
+        setConversationHistory((prev) => [
+          ...prev,
+          { role: "Patient", text: "[No response]" },
+          { role: "AI", text: "⚠️ Check-in ended — unable to reach patient. Care team has been notified." },
+        ]);
+        setStage("complete");
+        handleSaveResults();
+        setLoading(false);
+        return;
+      }
+
+      // Normal answer — add to history
       agentRef.current.addMessage("Patient", transcribedText);
       setConversationHistory((prev) => [
         ...prev,
@@ -153,13 +181,11 @@ export function VoiceCheckIn({ patient, onComplete }) {
       setQuestionCount((prev) => prev + 1);
 
       if (nextQ) {
-        // More questions
         setCurrentQuestion(nextQ);
         agentRef.current.addMessage("AI", nextQ);
         setConversationHistory((prev) => [...prev, { role: "AI", text: nextQ }]);
         setStage("displaying");
       } else {
-        // End conversation
         setStage("complete");
         handleSaveResults();
       }
@@ -196,6 +222,7 @@ export function VoiceCheckIn({ patient, onComplete }) {
         aiLog: summary.conversation,
         voiceMetrics: allMetricsRef.current,
         contentFindings,
+        sessionAlerts: summary.sessionAlerts,
         timestamp: new Date().toISOString(),
       });
     }
