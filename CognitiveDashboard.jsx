@@ -1073,7 +1073,7 @@ function PatientApp({ patient, onVoiceComplete }) {
                 {[
                   { icon: Heart,    label: "HRV",    val: `${patient.metrics.hrv}ms`,          color: "bg-pink-50",   ic: "text-pink-500" },
                   { icon: Mic,      label: "Speech", val: `${patient.metrics.speechScore}/100`, color: "bg-blue-50",   ic: "text-blue-500" },
-                  { icon: Activity, label: "Gait",   val: `${patient.gait.consistencyScore}/100`, color: "bg-teal-50", ic: "text-teal-500" },
+                  { icon: Activity, label: "Gait",   val: `${Math.max(2, Math.min(100, Math.round(100 - patient.gait.sessionCv * 8.2)))}/100`, color: "bg-teal-50", ic: "text-teal-500" },
                 ].map(({ icon: I, label, val, color, ic }) => (
                   <div key={label} className={`${color} rounded-xl p-2.5 text-center`}>
                     <I size={14} className={`${ic} mx-auto mb-1`} />
